@@ -4,7 +4,8 @@ import type { Address } from "viem";
 import type { Friend, Household, ProtocolState } from "../../types.js";
 import { ACTION_SELECTORS, ACTIVATION_MANAGER_ABI, ADDRESSES, ERC20_ABI } from "../../protocol/constants.js";
 import { rfToWei, weightFor } from "../../protocol/math.js";
-import { planHousehold } from "../planner.js";
+import { NEGLIGIBLE_CLAIM_RF, planHousehold, upgradesPaidRf } from "../planner.js";
+import { ERC6551_ACCOUNT_ABI } from "../../protocol/constants.js";
 
 const OWNER = "0x3d35A856cb96f9770c986841f4fdB7e198A272Cb" as Address;
 const WALLET = "0x4e0a44603D1f182E4C21c9CB24fcc4cBAeb1FE3b" as Address;
@@ -59,9 +60,18 @@ describe("planHousehold", () => {
     expect(kinds).not.toContain("train:597");
   });
 
-  it("puts claims first, then break-even ascending, nulls last", () => {
-    expect(plan[0]?.kind).toBe("claim");
-    const paid = plan.filter((a) => a.kind !== "claim");
+  it("puts claims worth gas first, then break-even ascending, nulls last, negligible claims at the very end", () => {
+    // the pup's 0.012 RF is not worth gas: it sorts last; a claim worth gas sorts first
+    expect(plan.at(-1)?.kind).toBe("claim");
+    expect(plan.at(-1)?.negligible).toBe(true);
+    expect(plan[0]?.kind).not.toBe("claim");
+    const fed = friend({ collection: "Generations", tokenId: 9n, generation: 3, rewards: { earnedRf: rfToWei(12), earnedWeth: 0n } });
+    const withFed = planHousehold({ ...household, friends: [pup, elder, fed] }, state);
+    expect(withFed[0]?.kind).toBe("claim");
+    expect(withFed[0]?.friend?.tokenId).toBe(9n);
+    expect(withFed[0]?.negligible).toBe(false);
+    expect(withFed.at(-1)?.friend?.tokenId).toBe(500_000n);
+    const paid = plan.filter((a) => a.kind !== "claim" && a.kind !== "withdraw");
     const weeks = paid.map((a) => a.breakEvenWeeks);
     const numeric = weeks.filter((w): w is number => w !== null);
     expect(numeric).toEqual([...numeric].sort((a, b) => a - b));
@@ -93,6 +103,63 @@ describe("planHousehold", () => {
     expect(raise?.costRf).toBe(9);
     expect(raise?.deltaWeight).toBeCloseTo(12 - 1.1, 9);
     expect(raise?.label).toBe("Raise #500000 to Gen 5");
+    expect(raise?.rationale).not.toContain("Tier resets");
+  });
+
+  it("raising a Friend with upgrades says the tier resets and how much RF is lost", () => {
+    const trained = friend({ collection: "Generations", tokenId: 343_695n, generation: 4, position: { tier: 2, weight: rfToWei(weightFor("Generations", 4, 2)), active: true } });
+    const actions = planHousehold({ ...household, friends: [trained] }, state);
+    const raise = actions.find((a) => a.kind === "raise");
+    expect(upgradesPaidRf(4, 2)).toBe(125); // 50 + 75
+    expect(raise?.label).toBe("Raise #343695 to Gen 3 (tier resets to 0)");
+    expect(raise?.rationale).toContain("Tier resets to 0; the 125 RF you paid in upgrades is not refunded.");
+    expect(upgradesPaidRf(1, 4)).toBe(50_000 + 75_000 + 112_500 + 168_750); // 50%, 75%, 112.5%, 168.75% of 100,000
+    expect(upgradesPaidRf(6, 0)).toBe(0);
+  });
+
+  it("negligible claims: below 0.5 RF and 0.00005 WETH, rationale says not worth gas", () => {
+    const claim = plan.find((a) => a.kind === "claim" && a.friend?.tokenId === 500_000n);
+    expect(claim?.negligible).toBe(true);
+    expect(claim?.rationale).toBe("Not worth gas yet: 0.0120 RF unclaimed.");
+    expect(claim?.txs).toHaveLength(1); // still prepared: the holder may claim anyway
+    const wethOnly = friend({ collection: "Generations", tokenId: 10n, generation: 6, rewards: { earnedRf: 0n, earnedWeth: rfToWei(0.0001) } });
+    const justRf = friend({ collection: "Generations", tokenId: 11n, generation: 6, rewards: { earnedRf: rfToWei(NEGLIGIBLE_CLAIM_RF), earnedWeth: 0n } });
+    const actions = planHousehold({ ...household, friends: [wethOnly, justRf] }, state);
+    expect(actions.find((a) => a.kind === "claim" && a.friend?.tokenId === 10n)?.negligible).toBe(false);
+    expect(actions.find((a) => a.kind === "claim" && a.friend?.tokenId === 11n)?.negligible).toBe(false);
+  });
+
+  it("withdraw: one execute() on the Friend's ERC-6551 wallet moving its RF to the owner, after paid actions, before negligible claims", () => {
+    const saver = friend({ collection: "Genesis", tokenId: 733n, generation: 0, savings: { rf: rfToWei(32_842.79), weth: 0n, eth: 0n } });
+    const actions = planHousehold({ ...household, friends: [pup, saver, elder] }, state);
+    const withdraw = actions.find((a) => a.kind === "withdraw");
+    expect(withdraw).toBeDefined();
+    expect(withdraw?.friend?.tokenId).toBe(733n);
+    expect(withdraw?.costRf).toBe(0);
+    expect(withdraw?.burnRf).toBe(0);
+    expect(withdraw?.breakEvenWeeks).toBeNull();
+    expect(withdraw?.label).toBe("Withdraw 32,842.79 RF from #733's wallet");
+    expect(withdraw?.rationale).toBe("Not a spend: takes the pet's RF savings back to your wallet.");
+    expect(withdraw?.txs).toHaveLength(1);
+    const tx = withdraw!.txs[0]!;
+    expect(tx.to).toBe(WALLET);
+    expect(tx.value).toBe(0n);
+    const call = decodeFunctionData({ abi: ERC6551_ACCOUNT_ABI, data: tx.data });
+    expect(call.functionName).toBe("execute");
+    const [to, value, data, operation] = call.args;
+    expect(to).toBe(getAddress(ADDRESSES.rf));
+    expect(value).toBe(0n);
+    expect(operation).toBe(0);
+    const inner = decodeFunctionData({ abi: ERC20_ABI, data });
+    expect(inner.functionName).toBe("transfer");
+    expect(inner.args).toEqual([OWNER, rfToWei(32_842.79)]);
+    // order: paid actions, then withdraw, then the negligible claim
+    const kinds = actions.map((a) => a.kind);
+    expect(kinds.indexOf("withdraw")).toBeGreaterThan(kinds.lastIndexOf("train"));
+    expect(kinds.indexOf("withdraw")).toBeGreaterThan(kinds.indexOf("save"));
+    expect(kinds.lastIndexOf("claim")).toBeGreaterThan(kinds.indexOf("withdraw"));
+    // no savings, no withdraw
+    expect(plan.some((a) => a.kind === "withdraw")).toBe(false);
   });
 
   it("prepends an approve when the allowance is short and encodes the right selectors", () => {
@@ -112,6 +179,7 @@ describe("planHousehold", () => {
   it("every paid action's calldata selector is a known protocol action", () => {
     const expected: Record<string, string> = { train: "upgrade", raise: "promote", wake: "activate", hatch: "hardwire", claim: "claim" };
     for (const action of plan) {
+      if (action.kind === "save" || action.kind === "withdraw") continue; // plain RF transfer / ERC-6551 execute, not protocol calls
       const last = action.txs.at(-1);
       const selector = last?.data.slice(0, 10) as keyof typeof ACTION_SELECTORS;
       expect(ACTION_SELECTORS[selector]).toBe(expected[action.kind]);
@@ -125,11 +193,13 @@ describe("planHousehold", () => {
   });
 
   it("claim is free and moves the earned RF", () => {
-    const claim = plan.find((a) => a.kind === "claim");
+    const fed = friend({ collection: "Generations", tokenId: 9n, generation: 3, rewards: { earnedRf: rfToWei(12.5), earnedWeth: 0n } });
+    const claim = planHousehold({ ...household, friends: [fed] }, state).find((a) => a.kind === "claim");
     expect(claim?.costRf).toBe(0);
     expect(claim?.breakEvenWeeks).toBeNull();
     expect(claim?.txs).toHaveLength(1);
-    expect(claim?.rationale).toContain("0.01 RF");
+    expect(claim?.rationale).toContain("12.50 RF");
+    expect(claim?.negligible).toBe(false);
   });
 
   it("no egg or no RF means no hatch; onlyAffordable drops the Genesis wake", () => {

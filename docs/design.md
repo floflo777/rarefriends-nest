@@ -1,6 +1,6 @@
 # Nest — design
 
-**One sentence.** Nest is a handheld virtual pet for Rare Friends where the pet is your Generations (or Genesis) NFT, its body is the NFT's real ERC-6551 wallet, and every care action is a real Rare Friends protocol action.
+**One sentence.** Nest is a handheld virtual pet for Rare Friends where the pet is your Generations (or Genesis) NFT, its body is the NFT's real ERC-6551 wallet, and every paid care action is a real Rare Friends protocol action (Save and Withdraw are plain RF transfers between your wallet and the pet's).
 
 Rare Friends describes itself as "a virtual-pet protocol for NFTs that collect crypto". Nest is that pet, literally.
 
@@ -22,7 +22,7 @@ Facts read from Robinhood Chain on 2026-09-30 (block ~76.46M), reproducible with
 Two consequences that shape the game:
 
 1. **65% of all Friends are Gen-6 pups that nobody raised.** Promoting one Gen-6 to Gen-5 costs 9 RF and burns 4.5. The raise ladder (6→1) is 100,000 RF per Friend, 50,000 burned. That ladder is the largest RF sink that exists, and it is unused.
-2. **Yield alone will not move Generations holders.** At today's stream, a Gen-6 tier upgrade pays for itself in ~106 weeks, a Gen-1 upgrade in ~66 weeks, a Genesis activation in ~6 weeks. Nest says so, out loud, in the Steward. The reasons to raise a Friend are the reasons people raise pets: it grows (on-chain art gains land with generation), it earns (weight ×~11 per generation), it is yours forever (NFT + wallet), and everyone can see what you did (rank by real burn).
+2. **Yield alone will not move Generations holders.** At today's stream (8,547,984 RF over total weight 1,068,713,094), every Generations action pays for itself in 61 to 114 weeks: 61.0 for a Gen-1 tier 3→4 upgrade, 65.8 for a Gen-1 tier 0→1, 106.4 for a Gen-6 tier 0→1, 113.7 for hardwiring a Gen-6. A Genesis activation pays for itself in 6.3 weeks. Nest says so, out loud, in the Steward. The reasons to raise a Friend are the reasons people raise pets: it grows (on-chain art gains land with generation), it earns (weight ×~11 per generation), it is yours forever (NFT + wallet), and everyone can see what you did (rank by real burn).
 
 ## The player loop
 
@@ -34,36 +34,39 @@ Open Nest daily. The handheld shows your Friend:
 | Strength | `positions(collection, id).tier` | Train | `upgrade(collection, id)` |
 | Territory | `generation(id)` | Raise | `promote(id)` |
 | Awake (Genesis) | `positions(...).weight > 0` | Wake | `activate(collection, id)` |
-| Eggs | `temporaryFriend(owner)` | Hatch | `hardwire(6)` for 1 RF |
-| Mood | weight ÷ `totalWeight()` and its trend | — | — |
-| Savings | RF, WETH, ETH in `tokenBoundAccount(id)` | Withdraw (owner) | ERC-6551 `execute` |
+| Eggs | `temporaryFriend(owner)` | Hatch | `hardwire(g)`: hardwire at the generation your balance selects, 1 RF for Gen-6 up to 100,000 RF for Gen-1 |
+| Mood | weight ÷ `totalWeight()`, hunger, clock, recent care | — | — |
+| Savings | RF, WETH, ETH in `tokenBoundAccount(id)` | Save (owner) | RF `transfer(wallet, amount)`: parks RF in the pet's wallet so the next egg hatches one generation cheaper |
+| Savings | same | Withdraw (owner) | ERC-6551 `execute(RF, 0, transfer(owner, amount), CALL)` on the pet's wallet: takes the RF back, nothing spent |
+| Home | `tokenURI(id)` | — | the NFT's own on-chain scene (SVG data URL, ~60 kB for a Gen-1 with land, 574 chars for a Genesis portrait), shown unaltered |
 
 Household = every Friend the wallet owns. Pups = Friends hatched from eggs. Raising a pup through generations is the mid-game; a maxed household is the end-game.
 
-Nest Rank: leaderboard of households by real RF burned (indexed from RF `Transfer(from, 0x0)` events emitted by ActivationManager, attributed to the transaction sender and function selector). No local state anywhere. Nothing can be faked.
+Nest Rank: leaderboard of households by RF burned, indexed from the chain (RF `Transfer(ActivationManager, 0x0)` events, attributed to the transaction sender and function selector; unknown selectors are reported as such). The index starts at a block and may lag: coverage (first block, share of total burn indexed) is shown on screen next to the ranks. No local state anywhere; every number is computed from chain state.
 
-Every paid action opens a confirmation showing exact RF cost, RF burned (50%), RF to rewards (50%), and the Steward's break-even for that action. Then the wallet signs. Nest never holds a key.
+Every paid action opens a confirmation showing exact RF cost, RF burned (50%), RF to rewards (50%), and the Steward's break-even for that action; a Raise of a trained Friend also states that the tier resets to 0 and how much RF paid in upgrades is not refunded. Then the wallet signs. Nest never holds a key.
 
 ## Personality
 
 Everything the pet does is a pure function of `(family, seed, vitals, time)`:
 
-- `familyOf(id)` (9 families) → temperament: how quickly hunger shows, idle habits, what it says.
-- `seedOf(id)` → name, favourite hour, one secret habit.
-- vitals → mood state: content, hungry, restless (rewards piling up), proud (recent promotion), sleepy, thrifty (savings grew).
-- Sprite: the NFT's canonical 64 on-chain frames from the families registry (`frames(family, seed)`), rendered 1-bit on a 96×64 LCD. Colour mode shows the frames with the original palette and the on-chain `tokenURI` scene unaltered.
+- Generations: `familyOf(id)` (9 families) → temperament: how quickly hunger shows, idle habits, what it says. `seedOf(id)` → name, favourite hour, one secret habit.
+- Genesis: no registry family. Its own tables: family "Genesis", temperament "Founder. Fixed weight, fixed gaze, nothing to prove.", a name drawn from a Genesis syllable table with the token id as seed, hunger threshold 0.5, its own habits and speech lines. Nothing Genesis says depends on the Generations tables, and the UI and the CLI print the same pet.
+- vitals → mood state: content, hungry, restless (rewards piling up), proud (a promotion or upgrade in the last 24 h, from the household's indexed burn records via `careEventsFromBurns`), sleepy, thrifty (savings grew since the last visit; the app keeps the previous savings level in localStorage).
+- Speech: one line of at most 22 characters, chosen by (seed, UTC day, UTC hour, mood), so a pet says something new every hour.
+- Sprite: the NFT's canonical 64 on-chain frames from the families registry (`frames(family, seed)`), rendered 1-bit on a 96×64 LCD. The Home screen shows the NFT's own `tokenURI` scene (an SVG data URL, read from the contract and rendered unaltered).
 
 Tables are authored by us; inputs are all chain state, so two people looking at the same Friend see the same pet.
 
 ## Steward
 
-For each Friend and each possible action: cost, Δweight, weekly RF at the current stream, break-even weeks. Ranks actions. Prepares `approve` + action calldata and dry-runs them (`eth_call` and `eth_estimateGas` from the holder's address) before the wallet is asked. CLI `nest plan <address>` prints the same plan as JSON for agents. Fully autonomous mode (a scoped delegate contract with allowed functions, spend cap and expiry) is specified in `docs/delegate.md` and not deployed.
+For each Friend and each possible action: cost, Δweight, weekly RF at the current stream, break-even weeks. Ranks actions: claims worth gas first, then paid actions by break-even, then Save and Withdraw (no spend), then claims below 0.5 RF and 0.00005 WETH, flagged "Not worth gas yet" so a Gen-6 pup's 0.01 RF a week is never ranked first. Prepares `approve` + action calldata and dry-runs them (`eth_call` and `eth_estimateGas` from the holder's address) before the wallet is asked. CLI `nest plan <address>` prints the same plan as JSON for agents. Fully autonomous mode (a scoped delegate contract with allowed functions, spend cap and expiry) is specified in `docs/delegate.md` and not deployed.
 
 ## For judges without a Friend
 
 - `/pet/<tokenId>`: any Friend, read-only, no wallet.
 - `/demo`: a simulated household built from a real snapshot; actions animate locally and are labelled SIMULATED.
-- `nest state <tokenId>` and `nest census` print chain-derived JSON.
+- `nest state <gen|genesis> <tokenId>`, `nest meta <gen|genesis> <tokenId>` (the NFT's own tokenURI) and `nest census` print chain-derived JSON.
 - `docs/dry-run.md`: recorded `eth_call`/`eth_estimateGas` results for every action against real holders.
 
 ## Not in scope, deliberately

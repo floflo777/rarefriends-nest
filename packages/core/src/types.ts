@@ -12,7 +12,9 @@ export interface FriendIdentity {
   /** 1..6 for Generations, 0 for Genesis. */
   generation: number;
   family?: number;
-  familyName?: FamilyName;
+  /** Registry family for Generations; "Genesis" for Genesis Friends (no registry family). */
+  familyName?: FamilyName | "Genesis";
+  /** Registry seed for Generations (seedOf(id) == id today); the token id for Genesis. */
   seed?: number;
 }
 
@@ -79,7 +81,7 @@ export type MoodState = "content" | "hungry" | "restless" | "proud" | "sleepy" |
 
 export interface Personality {
   name: string;
-  family: FamilyName;
+  family: FamilyName | "Genesis";
   temperament: string; // one line
   favouriteHour: number; // 0..23 UTC
   secretHabit: string;
@@ -100,7 +102,7 @@ export interface Sprite {
   walk: PetFrame[]; // frames 32..63
 }
 
-export type StewardActionKind = "claim" | "hatch" | "raise" | "train" | "wake" | "save";
+export type StewardActionKind = "claim" | "hatch" | "raise" | "train" | "wake" | "save" | "withdraw";
 
 export interface StewardAction {
   kind: StewardActionKind;
@@ -117,6 +119,11 @@ export interface StewardAction {
   rationale: string;
   /** For hatch: the generation the protocol will assign, selected by the wallet's RF balance. */
   hatchGeneration?: number;
+  /**
+   * For claim: true when the unclaimed rewards are below the gas-worthiness thresholds
+   * (planner NEGLIGIBLE_CLAIM_RF / NEGLIGIBLE_CLAIM_WETH). Negligible claims sort last.
+   */
+  negligible?: boolean;
 }
 
 export interface PreparedTx {

@@ -6,14 +6,15 @@
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import type { Hex } from "viem";
-import { EXPLORER_URL, type Eligibility, type StewardAction } from "@nest/core";
+import { EXPLORER_URL, type CareEvent, type Eligibility, type StewardAction } from "@nest/core";
 import { friendKey, type NestDataSource } from "../data/source.js";
-import { Lcd } from "../lcd/Lcd.jsx";
-import { careMenu, gateMenu, hatchOf, planFor } from "../model/care.js";
+import { Lcd, type LcdScene } from "../lcd/Lcd.jsx";
+import { careMenu, gateMenu, hatchOf, isPaid, planFor } from "../model/care.js";
 import { shortHash } from "../model/format.js";
-import { petState } from "../model/pet.js";
+import { identityOf, petState, previousSavings, recentCareEvents, rememberSavings, type PetMemory } from "../model/pet.js";
+import { sceneSource, type TokenScene } from "../model/scene.js";
 import { initialState, step, type Input, type MachineContext, type MachineState, type Screen } from "../screens/machine.js";
-import { renderScreen, type DeviceMode, type ScreenModel } from "../screens/render.js";
+import { renderScreen, sceneCaption, type DeviceMode, type SceneState, type ScreenModel } from "../screens/render.js";
 import { phaseAfterDryRun, runInput, type RunState } from "../screens/run.js";
 import type { ChainActions } from "../wallet/actions.js";
 import { Buttons } from "./Buttons.jsx";
@@ -87,6 +88,11 @@ export function Device({ source, mode, target, initialScreen = "PET", onSimulate
   const [eligibility, setEligibility] = useState<Record<string, Eligibility | "pending">>({});
   const [run, setRun] = useState<RunState | null>(null);
   const [txLinks, setTxLinks] = useState<Hex[]>([]);
+  const [scenes, setScenes] = useState<Record<string, SceneState>>({});
+  /** Promotes/upgrades run in this session, so the pet looks proud right after. */
+  const [localEvents, setLocalEvents] = useState<CareEvent[]>([]);
+  /** Savings scale per token as it was when the token first came on screen this session. */
+  const savingsBefore = useRef<Record<string, number | undefined>>({});
   const runSeq = useRef(0);
   const reduced = usePrefersReducedMotion();
   const now = nowMs / 1000;
@@ -102,7 +108,7 @@ export function Device({ source, mode, target, initialScreen = "PET", onSimulate
 
   const ctx: MachineContext = useMemo(
     () => ({
-      care: care.map((c) => ({ kind: c.action.kind, enabled: c.enabled })),
+      care: care.map((c) => ({ kind: c.action.kind, enabled: c.enabled, paid: isPaid(c.action) })),
       friendCount: friends.length,
       hasEgg: (data.household?.eggTokenId ?? null) !== null,
       readOnly: mode === "visitor",
@@ -124,6 +130,30 @@ export function Device({ source, mode, target, initialScreen = "PET", onSimulate
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, chain, petKey, data.generation]);
+
+  /** A promote or upgrade that went through (simulated or signed) makes the pet proud for a day. */
+  const recordCare = useCallback((action: StewardAction) => {
+    const kind = action.kind === "raise" ? "promote" : action.kind === "train" ? "upgrade" : null;
+    if (kind) setLocalEvents((e) => [...e, { action: kind, at: Date.now() / 1000 }]);
+  }, []);
+
+  // Thrifty: compare today's savings with what this browser saw last time, once per token.
+  const memory: PetMemory = useMemo(() => {
+    const m: PetMemory = { recentEvents: recentCareEvents(data.household?.owner, data.snapshot, now, localEvents) };
+    if (petKey && pet) {
+      if (!(petKey in savingsBefore.current)) savingsBefore.current[petKey] = previousSavings(petKey);
+      const before = savingsBefore.current[petKey];
+      if (before !== undefined) m.previousSavings = before;
+    }
+    return m;
+    // `now` only matters at day granularity for the events; re-deriving on every tick is cheap.
+  }, [data.household, data.snapshot, localEvents, petKey, pet, now]);
+
+  useEffect(() => {
+    if (!pet || !petKey) return;
+    rememberSavings(petKey, petState(pet, data.protocol, now, memory).vitals.savings);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [petKey, data.generation]);
 
   const finishRun = useCallback(
     (refresh: boolean) => {
@@ -154,12 +184,13 @@ export function Device({ source, mode, target, initialScreen = "PET", onSimulate
           setTxLinks((l) => [...l, hash]);
         }
         update({ phase: "done", hashes });
+        recordCare(action);
         setToast(`DONE · tx ${shortHash(hashes[hashes.length - 1] ?? "")}`);
       } catch (e) {
         update({ phase: "failed", message: errorText(e), hashes });
       }
     },
-    [chain],
+    [chain, recordCare],
   );
 
   // Run a confirmed action outside the reducer, once per confirmation.
@@ -177,6 +208,7 @@ export function Device({ source, mode, target, initialScreen = "PET", onSimulate
         .then(
           (line) => {
             setToast(line);
+            recordCare(action);
             data.refresh();
           },
           (e: unknown) => setToast(errorText(e)),
@@ -199,9 +231,28 @@ export function Device({ source, mode, target, initialScreen = "PET", onSimulate
     return () => clearTimeout(t);
   }, [toast]);
 
-  // Clock: at the clip's frame rate on the PET screen, slowly elsewhere (vitals and mood follow the time).
+  // HOME: read the pet's tokenURI scene once per token, only when someone looks at it.
   const screen = state.machine.screen;
-  const fps = pet && screen === "PET" && !reduced && !run ? petState(pet, data.protocol, now).animation.fps : 0;
+  useEffect(() => {
+    if (screen !== "HOME" || !pet || !petKey || scenes[petKey]) return;
+    if (!source.scene) {
+      setScenes((m) => ({ ...m, [petKey]: { status: "failed", message: "no scene in this data source" } }));
+      return;
+    }
+    let cancelled = false;
+    setScenes((m) => ({ ...m, [petKey]: { status: "loading" } }));
+    void source.scene(pet).then(
+      (scene: TokenScene) => !cancelled && setScenes((m) => ({ ...m, [petKey]: { status: "ready", scene } })),
+      (err: unknown) => !cancelled && setScenes((m) => ({ ...m, [petKey]: { status: "failed", message: errorText(err) } })),
+    );
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, petKey]);
+
+  // Clock: at the clip's frame rate on the PET screen, slowly elsewhere (vitals and mood follow the time).
+  const fps = pet && screen === "PET" && !reduced && !run ? petState(pet, data.protocol, now, memory).animation.fps : 0;
   useEffect(() => {
     const t = setInterval(() => setNowMs(Date.now()), fps > 0 ? Math.round(1000 / fps) : SLOW_TICK_MS);
     return () => clearInterval(t);
@@ -264,8 +315,14 @@ export function Device({ source, mode, target, initialScreen = "PET", onSimulate
     status: data.status,
     loading: data.loading,
     run,
+    memory,
+    scene: petKey ? (scenes[petKey] ?? null) : null,
   };
   const image = renderScreen(state.machine, model);
+  const sceneState = model.scene;
+  const sceneSrc = sceneState?.status === "ready" ? sceneSource(sceneState.scene, reduced) : null;
+  const lcdScene: LcdScene | null =
+    screen === "HOME" && !run && pet && sceneSrc ? { src: sceneSrc, alt: `On-chain scene of ${identityOf(pet).name}, ${pet.collection} #${pet.tokenId}`, caption: sceneCaption(pet) } : null;
 
   return (
     <section className="device" aria-label="Nest handheld">
@@ -277,7 +334,7 @@ export function Device({ source, mode, target, initialScreen = "PET", onSimulate
             {sound ? "♫" : "♪"}
           </button>
         </div>
-        <Lcd image={image} />
+        <Lcd image={image} scene={lcdScene} />
         <Buttons onPress={press} />
         <p className="hint">Arrow keys move, Enter or Space selects</p>
       </div>

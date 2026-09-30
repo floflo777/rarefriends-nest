@@ -1,26 +1,36 @@
 /**
- * Mock data source: real core types built from Robinhood Chain reads on 2026-09-30 plus a
- * synthetic demo household. `simulate(action)` applies the Steward's own prepared calldata
- * to the fixtures the way the protocol would (claim, upgrade, promote, activate, hardwire,
- * RF transfer), so the demo runs the exact same planner, vitals and personality as live
- * mode. Nothing here touches a wallet or the chain.
+ * Demo data source: a real household baked from Robinhood Chain (`fixtures/demo.json`,
+ * written by `scripts/bake-demo.ts`) plus local simulation of the Steward's actions.
+ *
+ * Every Friend is real: identity, family and seed from the registry (so core `describe`
+ * gives its real name), position, rewards, savings and its 64 on-chain frames. What the demo
+ * simulates: `simulate(action)` applies the planner's own calldata to this state the way the
+ * protocol would (claim, upgrade, promote, activate, hardwire, RF transfer, ERC-6551
+ * withdraw), and unclaimed rewards keep accruing at the Friend's real weekly rate
+ * (weight / totalWeight x stream) accelerated DEMO_TIME_SCALE times, so hunger visibly
+ * returns after a Feed. Nothing here touches a wallet or the chain; the dry-run of a
+ * confirmed action against the live RPC lives in `screens/run.ts`.
  */
-import { decodeFunctionData, isAddressEqual, parseEther } from "viem";
+import { decodeFunctionData, isAddressEqual } from "viem";
 import type { Address } from "viem";
 import {
   ACTIVATION_MANAGER_ABI,
   ADDRESSES,
   ERC20_ABI,
+  ERC6551_ACCOUNT_ABI,
   FAMILY_NAMES,
   FRAME_COUNT,
   activateCostWei,
   asciiToFrame,
+  decodeFrames,
+  decodePortrait8,
   frameToRows,
   hardwireCostWei,
   promoteCostWei,
   rfToWei,
   rowsToFrame,
   upgradeCostWei,
+  weeklyRfFor,
   weiToRf,
   weightFor,
   type Collection,
@@ -32,9 +42,12 @@ import {
   type Sprite,
   type StewardAction,
 } from "@nest/core";
-import { SourceError, type NestDataSource } from "./source.js";
+import demoJson from "./fixtures/demo.json";
+import type { DemoFixture, FixtureFriend, FixtureProtocol } from "./fixtures/schema.js";
+import { portraitToFrame, stillSprite } from "./live.js";
+import { SourceError, friendKey, type NestDataSource } from "./source.js";
 
-/** Friend 1969 (Generations, family Asymmetry), frame 0 of its 64 on-chain frames. */
+/** Friend 1969 (Generations, family Asymmetry), frame 0 of its 64 on-chain frames (LCD tests). */
 export const FRIEND_1969_FRAME = `
 ................
 ................
@@ -53,7 +66,7 @@ export const FRIEND_1969_FRAME = `
 .....##..##.....
 ................`;
 
-/** A generic pup silhouette for Friends whose frames are not hardcoded. */
+/** Placeholder silhouette for a pup hatched during the demo: it has no registry frames yet. */
 const GENERIC_FRAME = `
 ................
 ................
@@ -72,15 +85,14 @@ const GENERIC_FRAME = `
 ......####......
 ................`;
 
-export const DEMO_OWNER: Address = "0xd3a0d3a0d3a0d3a0d3a0d3a0d3a0d3a0d3a0d3a0";
-const DEMO_RF_BALANCE = parseEther("250000");
-const FIRST_EGG = 700_001n;
-const HOUSEHOLD_RANK_BURNED_RF = 84_500;
+/** Rewards accrue this many times faster than on chain, so hunger returns within minutes. */
+export const DEMO_TIME_SCALE = 1000;
+const WEEK_S = 7 * 86_400;
 
-function tba(tokenId: bigint, collection: Collection): Address {
-  const tag = collection === "Genesis" ? "6e" : "9e";
-  return `0x${tag}${tokenId.toString(16).padStart(38, "0")}` as Address;
-}
+/** The baked household, as committed. */
+export const DEMO_FIXTURE: DemoFixture = demoJson as unknown as DemoFixture;
+/** The real owner of the demo household. */
+export const DEMO_OWNER: Address = DEMO_FIXTURE.owner;
 
 function shift(frame: PetFrame, dy: number): PetFrame {
   const rows = frameToRows(frame);
@@ -109,115 +121,107 @@ export function spriteFromPose(ascii: string): Sprite {
   return { frames, idle: frames.slice(0, FRAME_COUNT / 2), walk: frames.slice(FRAME_COUNT / 2) };
 }
 
-function generationsFriend(tokenId: number, generation: number, tier: number, family: number, extra: Partial<Friend> = {}): Friend {
-  return {
-    collection: "Generations",
-    tokenId: BigInt(tokenId),
-    owner: DEMO_OWNER,
-    wallet: tba(BigInt(tokenId), "Generations"),
-    generation,
-    family,
-    familyName: FAMILY_NAMES[family] ?? "Skeleton",
-    seed: tokenId,
-    position: { tier, weight: rfToWei(weightFor("Generations", generation, tier)), active: true },
-    rewards: { earnedRf: 0n, earnedWeth: 0n },
-    savings: { rf: 0n, weth: 0n, eth: 0n },
-    ...extra,
+/** The fixture turned back into core types. */
+export interface LoadedFixture {
+  owner: Address;
+  bakedAt: number; // unix seconds
+  blockNumber: bigint;
+  friends: Friend[];
+  /** By `friendKey`. */
+  sprites: Map<string, Sprite>;
+  eggTokenId: bigint | null;
+  rfBalance: bigint;
+  rfAllowance: bigint;
+  /** As baked: real stream timestamps. */
+  protocol: ProtocolState;
+  census: Snapshot | null;
+}
+
+function bigintOf(raw: string, label: string): bigint {
+  if (!/^\d+$/.test(raw)) throw new TypeError(`fixture ${label}: expected a decimal bigint string, got ${raw}`);
+  return BigInt(raw);
+}
+
+function friendOf(f: FixtureFriend): Friend {
+  const label = `${f.collection} #${f.tokenId}`;
+  if (f.collection !== "Generations" && f.collection !== "Genesis") throw new TypeError(`fixture ${label}: unknown collection`);
+  const out: Friend = {
+    collection: f.collection,
+    tokenId: bigintOf(f.tokenId, `${label} tokenId`),
+    owner: f.owner,
+    wallet: f.wallet,
+    generation: f.generation,
+    position: { tier: f.position.tier, weight: bigintOf(f.position.weight, `${label} weight`), active: f.position.active },
+    rewards: { earnedRf: bigintOf(f.rewards.earnedRf, `${label} earnedRf`), earnedWeth: bigintOf(f.rewards.earnedWeth, `${label} earnedWeth`) },
+    savings: { rf: bigintOf(f.savings.rf, `${label} rf`), weth: bigintOf(f.savings.weth, `${label} weth`), eth: bigintOf(f.savings.eth, `${label} eth`) },
   };
-}
-
-function initialFriends(): Friend[] {
-  return [
-    // Real facts: Gen 1 tier 2, weight 416,250, family Asymmetry, 36,189 RF + 0.0228 WETH unclaimed.
-    generationsFriend(1969, 1, 2, 4, {
-      rewards: { earnedRf: parseEther("36189"), earnedWeth: parseEther("0.0228") },
-      savings: { rf: parseEther("12400"), weth: parseEther("0.0912"), eth: parseEther("0.004") },
-    }),
-    // Real facts: Gen 4 tier 1, weight 198.75. Family is a placeholder.
-    generationsFriend(343695, 4, 1, 5, {
-      rewards: { earnedRf: parseEther("3.2"), earnedWeth: 0n },
-      savings: { rf: parseEther("41"), weth: 0n, eth: 0n },
-    }),
-    // Synthetic Gen 6 pup: 1 RF hardwired, weight 1.10, never fed.
-    generationsFriend(612044, 6, 0, 3, { rewards: { earnedRf: parseEther("0.0141"), earnedWeth: 0n } }),
-    // Synthetic inactive Genesis Friend (weight 0): the Wake action.
-    {
-      collection: "Genesis",
-      tokenId: 77n,
-      owner: DEMO_OWNER,
-      wallet: tba(77n, "Genesis"),
-      generation: 0,
-      family: 7,
-      familyName: "Sparkling",
-      seed: 77,
-      position: { tier: 0, weight: 0n, active: false },
-      rewards: { earnedRf: 0n, earnedWeth: 0n },
-      savings: { rf: 0n, weth: 0n, eth: 0n },
-    },
-  ];
-}
-
-function initialProtocol(): ProtocolState {
-  const now = Math.floor(Date.now() / 1000);
-  const periodFinish = now + 3 * 86_400;
-  return {
-    blockNumber: 76_460_000n,
-    timestamp: now,
-    totalWeight: parseEther("1068713093.63"),
-    rfStream: { amount: parseEther("8547984.3"), periodFinish, lastUpdate: now - 6 * 3600 },
-    wethStream: { amount: parseEther("1.6288"), periodFinish, lastUpdate: now - 6 * 3600 },
-    rfTotalSupply: parseEther("947740000"),
-  };
-}
-
-function fakeAddress(i: number): Address {
-  // Deterministic, visibly distinct synthetic addresses for the demo leaderboard.
-  let h = 0x9e37_79b9 ^ (i + 1) * 0x85eb_ca6b;
-  let out = "";
-  for (let k = 0; k < 5; k++) {
-    h = (Math.imul(h ^ (h >>> 15), 0x2c1b_3c6d) ^ (i * 0x297a_2d39)) >>> 0;
-    out += h.toString(16).padStart(8, "0");
+  if (f.family !== undefined) {
+    if (FAMILY_NAMES[f.family] === undefined) throw new RangeError(`fixture ${label}: family ${f.family} is not a registry family`);
+    out.family = f.family;
   }
-  return `0x${out}` as Address;
+  if (f.seed !== undefined) out.seed = f.seed;
+  if (f.familyName !== undefined) {
+    if (f.familyName !== "Genesis" && !(FAMILY_NAMES as readonly string[]).includes(f.familyName)) throw new RangeError(`fixture ${label}: unknown family name ${f.familyName}`);
+    out.familyName = f.familyName as NonNullable<Friend["familyName"]>;
+  }
+  return out;
 }
 
-function initialSnapshot(): Snapshot {
-  const now = Math.floor(Date.UTC(2026, 8, 30, 9, 0, 0) / 1000);
-  const others = [4_212_500, 2_900_000, 1_150_000, 640_000, HOUSEHOLD_RANK_BURNED_RF, 61_000, 25_300, 9_950, 2_100, 505];
-  const leaderboard = others.map((burnedRf, i) => ({
-    owner: i === 4 ? DEMO_OWNER : fakeAddress(i),
-    burnedRf,
-    actions: Math.max(1, Math.round(burnedRf / 4000) + 3),
-    lastActionAt: now - i * 5400,
-  }));
+function protocolOf(p: FixtureProtocol, blockNumber: bigint): ProtocolState {
   return {
-    blockNumber: 76_460_000,
-    timestamp: now,
-    totals: {
-      burnedRf: 76_260_000,
-      burnEvents: 66_412,
-      byAction: {
-        hardwire: { count: 62_333, burnedRf: 21_400_000 },
-        promote: { count: 2_811, burnedRf: 18_600_000 },
-        upgrade: { count: 1_053, burnedRf: 24_260_000 },
-        activate: { count: 215, burnedRf: 12_000_000 },
-      },
-    },
-    daily: [
-      { day: "2026-09-27", burnedRf: 610_000, events: 402 },
-      { day: "2026-09-28", burnedRf: 522_000, events: 377 },
-      { day: "2026-09-29", burnedRf: 655_000, events: 419 },
-      { day: "2026-09-30", burnedRf: 375_000, events: 231 },
-    ],
-    leaderboard,
-    hardwired: {
-      total: 62_333,
-      byGeneration: { "1": 522, "2": 335, "3": 1_028, "4": 4_218, "5": 15_527, "6": 40_703 },
-      wallets: 3_738,
-      firstBlock: 64_590_957,
-    },
-    genesis: { activated: 495, inactive: 118, reserveHeld: 411 },
+    blockNumber,
+    timestamp: p.timestamp,
+    totalWeight: bigintOf(p.totalWeight, "totalWeight"),
+    rfStream: { amount: bigintOf(p.rfStream.amount, "rfStream.amount"), periodFinish: p.rfStream.periodFinish, lastUpdate: p.rfStream.lastUpdate },
+    wethStream: { amount: bigintOf(p.wethStream.amount, "wethStream.amount"), periodFinish: p.wethStream.periodFinish, lastUpdate: p.wethStream.lastUpdate },
+    rfTotalSupply: bigintOf(p.rfTotalSupply, "rfTotalSupply"),
   };
+}
+
+/** Parses and validates a baked fixture; throws on anything that is not a real, complete record. */
+export function loadFixture(fixture: DemoFixture = DEMO_FIXTURE): LoadedFixture {
+  if (!Array.isArray(fixture.friends) || fixture.friends.length === 0) throw new TypeError("fixture: no Friends");
+  const bakedAt = Math.floor(Date.parse(fixture.bakedAt) / 1000);
+  if (!Number.isFinite(bakedAt)) throw new TypeError(`fixture: bad bakedAt ${fixture.bakedAt}`);
+  const blockNumber = bigintOf(fixture.blockNumber, "blockNumber");
+  const friends = fixture.friends.map(friendOf);
+  const sprites = new Map<string, Sprite>();
+  fixture.friends.forEach((f, i) => {
+    const words = fixture.sprites[f.sprite];
+    if (!words) throw new TypeError(`fixture ${f.collection} #${f.tokenId}: sprite ${f.sprite} missing`);
+    const key = friendKey(friends[i]!.collection, friends[i]!.tokenId);
+    if (words.kind === "frames") {
+      sprites.set(key, decodeFrames(words.words.map((w) => BigInt(w))));
+    } else {
+      if (words.words.length !== 1) throw new TypeError(`fixture sprite ${f.sprite}: a portrait is one word`);
+      sprites.set(key, stillSprite(portraitToFrame(decodePortrait8(BigInt(words.words[0]!)))));
+    }
+  });
+  const census = fixture.census;
+  return {
+    owner: fixture.owner,
+    bakedAt,
+    blockNumber,
+    friends,
+    sprites,
+    eggTokenId: fixture.household.eggTokenId === null ? null : bigintOf(fixture.household.eggTokenId, "eggTokenId"),
+    rfBalance: bigintOf(fixture.household.rfBalance, "rfBalance"),
+    rfAllowance: bigintOf(fixture.household.rfAllowance, "rfAllowance"),
+    protocol: protocolOf(fixture.protocol, blockNumber),
+    census: census
+      ? { blockNumber: census.blockNumber, timestamp: census.timestamp, totals: census.totals, daily: census.daily, leaderboard: census.leaderboard, hardwired: census.hardwired, genesis: census.genesis }
+      : null,
+  };
+}
+
+export interface MockOptions {
+  /** The real indexer snapshot (live.ts `snapshot()`), tried before the fixture's copy. */
+  snapshot?: () => Promise<Snapshot>;
+  /** Clock in milliseconds (tests). Default Date.now. */
+  now?: () => number;
+  /** Accrual acceleration. Default DEMO_TIME_SCALE. */
+  timeScale?: number;
+  fixture?: DemoFixture;
 }
 
 export interface MockSource extends NestDataSource {
@@ -225,6 +229,8 @@ export interface MockSource extends NestDataSource {
   simulate(action: StewardAction): string;
   /** Reset fixtures to their initial state (tests). */
   reset(): void;
+  readonly timeScale: number;
+  readonly fixture: LoadedFixture;
 }
 
 const rf = (wei: bigint) => weiToRf(wei).toLocaleString("en-US", { maximumFractionDigits: 2 });
@@ -233,19 +239,82 @@ function collectionOf(address: Address): Collection {
   return isAddressEqual(address, ADDRESSES.genesis) ? "Genesis" : "Generations";
 }
 
-export function createMockSource(): MockSource {
-  let friends = initialFriends();
-  let protocol = initialProtocol();
-  let egg: bigint | null = FIRST_EGG;
-  let rfBalance = DEMO_RF_BALANCE;
-  let rfAllowance = 0n;
-  let burnedByHousehold = HOUSEHOLD_RANK_BURNED_RF;
-  let householdActions = 24;
-  let snapshot = initialSnapshot();
+/** RF units to wei at nano-RF precision (accrual amounts are arbitrary floats). */
+function accruedWei(rfUnits: number): bigint {
+  if (!(rfUnits > 0)) return 0n;
+  return BigInt(Math.round(rfUnits * 1e9)) * 10n ** 9n;
+}
 
-  const find = (collection: Collection, tokenId: bigint): Friend | null => friends.find((f) => f.collection === collection && f.tokenId === tokenId) ?? null;
-  const replace = (updated: Friend): void => {
-    friends = friends.map((f) => (f.collection === updated.collection && f.tokenId === updated.tokenId ? updated : f));
+/** A Friend plus the moment its stored rewards were exact; rewards are projected forward on read. */
+interface Pet {
+  friend: Friend;
+  since: number; // unix seconds
+}
+
+export function createMockSource(options: MockOptions = {}): MockSource {
+  const fixture = loadFixture(options.fixture);
+  const clock = options.now ?? Date.now;
+  const timeScale = options.timeScale ?? DEMO_TIME_SCALE;
+  const nowS = () => clock() / 1000;
+
+  let sessionStart = nowS();
+  let pets = new Map<string, Pet>();
+  let protocol: ProtocolState = fixture.protocol;
+  let egg: bigint | null = fixture.eggTokenId;
+  let rfBalance = fixture.rfBalance;
+  let rfAllowance = fixture.rfAllowance;
+  /** Burns and actions the demo added on top of the real snapshot. */
+  let burnedDeltaRf = 0;
+  let actionsDelta = 0;
+  let lastActionAt = 0;
+  let baseSnapshot: Promise<Snapshot> | null = null;
+  const hatchedSprites = new Map<string, Sprite>();
+
+  const init = (): void => {
+    sessionStart = nowS();
+    pets = new Map(fixture.friends.map((friend) => [friendKey(friend.collection, friend.tokenId), { friend, since: sessionStart }]));
+    // The stream is re-funded weekly on chain; the baked period is anchored on this session so the
+    // fixture keeps streaming (and hunger keeps meaning something) however long after the bake it runs.
+    protocol = {
+      ...fixture.protocol,
+      rfStream: { ...fixture.protocol.rfStream, lastUpdate: Math.floor(sessionStart), periodFinish: Math.floor(sessionStart) + WEEK_S },
+      wethStream: { ...fixture.protocol.wethStream, lastUpdate: Math.floor(sessionStart), periodFinish: Math.floor(sessionStart) + WEEK_S },
+    };
+    egg = fixture.eggTokenId;
+    rfBalance = fixture.rfBalance;
+    rfAllowance = fixture.rfAllowance;
+    burnedDeltaRf = 0;
+    actionsDelta = 0;
+    lastActionAt = 0;
+    hatchedSprites.clear();
+  };
+  init();
+
+  /** Rewards at `at`: stored base plus the real weekly rate over the elapsed time, accelerated. */
+  const project = (pet: Pet, at: number): Friend => {
+    const weeks = (Math.max(0, at - pet.since) / WEEK_S) * timeScale;
+    if (weeks === 0 || !pet.friend.position.active) return pet.friend;
+    const weight = weiToRf(pet.friend.position.weight);
+    const total = weiToRf(protocol.totalWeight);
+    const rfPerWeek = weeklyRfFor(weight, total, weiToRf(protocol.rfStream.amount));
+    const wethPerWeek = weeklyRfFor(weight, total, weiToRf(protocol.wethStream.amount));
+    return {
+      ...pet.friend,
+      rewards: { earnedRf: pet.friend.rewards.earnedRf + accruedWei(rfPerWeek * weeks), earnedWeth: pet.friend.rewards.earnedWeth + accruedWei(wethPerWeek * weeks) },
+    };
+  };
+
+  const current = (): Friend[] => {
+    const at = nowS();
+    return [...pets.values()].map((p) => project(p, at));
+  };
+  const find = (collection: Collection, tokenId: bigint): Friend | null => {
+    const pet = pets.get(friendKey(collection, tokenId));
+    return pet ? project(pet, nowS()) : null;
+  };
+  /** Stores `updated` with its rewards exact now (accrual restarts from this moment). */
+  const put = (updated: Friend): void => {
+    pets.set(friendKey(updated.collection, updated.tokenId), { friend: updated, since: nowS() });
   };
 
   /** A paid action: RF leaves the wallet, half is burned, half streams; weight moves. */
@@ -253,12 +322,10 @@ export function createMockSource(): MockSource {
     rfBalance -= costWei;
     rfAllowance = 0n;
     const burned = costWei / 2n;
-    burnedByHousehold += weiToRf(burned);
-    householdActions += 1;
+    burnedDeltaRf += weiToRf(burned);
+    actionsDelta += 1;
+    lastActionAt = Math.floor(nowS());
     protocol = { ...protocol, rfTotalSupply: protocol.rfTotalSupply - burned, totalWeight: protocol.totalWeight + deltaWeight };
-    snapshot = { ...snapshot, totals: { ...snapshot.totals, burnedRf: snapshot.totals.burnedRf + weiToRf(burned) } };
-    const board = snapshot.leaderboard.map((r) => (isAddressEqual(r.owner, DEMO_OWNER) ? { ...r, burnedRf: burnedByHousehold, actions: householdActions } : r));
-    snapshot.leaderboard = board.sort((a, b) => b.burnedRf - a.burnedRf);
   };
 
   const applyErc20 = (data: `0x${string}`): string => {
@@ -269,12 +336,27 @@ export function createMockSource(): MockSource {
     }
     if (call.functionName === "transfer") {
       const [to, amount] = call.args;
-      const target = friends.find((f) => isAddressEqual(f.wallet, to));
+      const target = current().find((f) => isAddressEqual(f.wallet, to));
       rfBalance -= amount;
-      if (target) replace({ ...target, savings: { ...target.savings, rf: target.savings.rf + amount } });
+      if (target) put({ ...target, savings: { ...target.savings, rf: target.savings.rf + amount } });
       return `Saved ${rf(amount)} RF into ${target ? `#${target.tokenId}'s` : "the"} wallet`;
     }
     throw new Error(`mock: unsupported RF call ${call.functionName}`);
+  };
+
+  /** Withdraw: execute(RF, 0, transfer(owner, amount), CALL) on the Friend's ERC-6551 wallet. */
+  const applyAccount = (wallet: Address, data: `0x${string}`): string => {
+    const friend = current().find((f) => isAddressEqual(f.wallet, wallet));
+    if (!friend) throw new Error("mock: execute on an unknown wallet");
+    const call = decodeFunctionData({ abi: ERC6551_ACCOUNT_ABI, data });
+    const [target, , inner] = call.args;
+    if (!isAddressEqual(target, ADDRESSES.rf)) throw new Error("mock: execute targets something other than RF");
+    const transfer = decodeFunctionData({ abi: ERC20_ABI, data: inner });
+    if (transfer.functionName !== "transfer") throw new Error(`mock: unsupported inner call ${transfer.functionName}`);
+    const [to, amount] = transfer.args;
+    put({ ...friend, savings: { ...friend.savings, rf: friend.savings.rf - amount } });
+    if (isAddressEqual(to, fixture.owner)) rfBalance += amount;
+    return `Withdrew ${rf(amount)} RF from #${friend.tokenId}'s wallet`;
   };
 
   const applyManager = (data: `0x${string}`): string => {
@@ -286,7 +368,7 @@ export function createMockSource(): MockSource {
         if (!friend) throw new Error("mock: claim on an unknown Friend");
         const isRf = isAddressEqual(asset, ADDRESSES.rf);
         const amount = isRf ? friend.rewards.earnedRf : friend.rewards.earnedWeth;
-        replace({
+        put({
           ...friend,
           rewards: isRf ? { ...friend.rewards, earnedRf: 0n } : { ...friend.rewards, earnedWeth: 0n },
           savings: isRf ? { ...friend.savings, rf: friend.savings.rf + amount } : { ...friend.savings, weth: friend.savings.weth + amount },
@@ -300,7 +382,7 @@ export function createMockSource(): MockSource {
         const tier = friend.position.tier + 1;
         const weight = rfToWei(weightFor(friend.collection, friend.generation, tier));
         pay(upgradeCostWei(friend.collection, friend.generation, friend.position.tier), weight - friend.position.weight);
-        replace({ ...friend, position: { tier, weight, active: true } });
+        put({ ...friend, position: { tier, weight, active: true } });
         return `Trained #${friend.tokenId} to tier ${tier}`;
       }
       case "promote": {
@@ -310,7 +392,7 @@ export function createMockSource(): MockSource {
         const generation = friend.generation - 1;
         const weight = friend.position.active ? rfToWei(weightFor("Generations", generation, 0)) : friend.position.weight;
         pay(promoteCostWei(friend.generation), weight - friend.position.weight);
-        replace({ ...friend, generation, position: { tier: 0, weight, active: friend.position.active } });
+        put({ ...friend, generation, position: { tier: 0, weight, active: friend.position.active } });
         return `Raised #${friend.tokenId} to Gen ${generation}`;
       }
       case "activate": {
@@ -319,27 +401,78 @@ export function createMockSource(): MockSource {
         if (!friend) throw new Error("mock: activate on an unknown Friend");
         const weight = rfToWei(weightFor(friend.collection, friend.generation, friend.position.tier));
         pay(activateCostWei(friend.collection, friend.generation), weight);
-        replace({ ...friend, position: { ...friend.position, weight, active: true } });
+        put({ ...friend, position: { ...friend.position, weight, active: true } });
         return `Woke ${friend.collection} #${friend.tokenId}`;
       }
       case "hardwire": {
         const [generation] = call.args;
         if (egg === null) throw new Error("mock: no egg to hatch");
-        const id = Number(egg);
-        const pup = generationsFriend(id, generation, 0, id % FAMILY_NAMES.length);
-        friends = [...friends, pup];
+        const id = egg;
+        // Family, name and frames are the registry's business once the pup exists on chain: none is invented here.
+        const pup: Friend = {
+          collection: "Generations",
+          tokenId: id,
+          owner: fixture.owner,
+          wallet: `0x9e${id.toString(16).padStart(38, "0")}` as Address,
+          generation,
+          position: { tier: 0, weight: rfToWei(weightFor("Generations", generation, 0)), active: true },
+          rewards: { earnedRf: 0n, earnedWeth: 0n },
+          savings: { rf: 0n, weth: 0n, eth: 0n },
+        };
         pay(hardwireCostWei(generation), pup.position.weight);
-        egg = egg + 1n;
-        return `Hatched #${id} as a Gen-${generation} pup`;
+        put(pup);
+        hatchedSprites.set(friendKey(pup.collection, pup.tokenId), spriteFromPose(GENERIC_FRAME));
+        egg = id + 1n;
+        return `Hatched #${id} as a Gen-${generation} pup (placeholder art until it exists on chain)`;
       }
       default:
         throw new Error(`mock: unsupported protocol call ${call.functionName}`);
     }
   };
 
+  const loadBaseSnapshot = (): Promise<Snapshot> => {
+    if (baseSnapshot) return baseSnapshot;
+    const p = (async () => {
+      if (options.snapshot) {
+        try {
+          return await options.snapshot();
+        } catch {
+          // Fall back to the copy baked with the fixture.
+        }
+      }
+      if (fixture.census) return fixture.census;
+      throw new SourceError("unavailable", "no snapshot: the indexer has not run and the fixture carries none");
+    })();
+    baseSnapshot = p;
+    p.catch(() => {
+      baseSnapshot = null;
+    });
+    return p;
+  };
+
+  /** The real snapshot with the demo's own burns added to the household's row and the totals. */
+  const overlay = (base: Snapshot): Snapshot => {
+    const board = base.leaderboard.map((r) => ({ ...r }));
+    if (burnedDeltaRf > 0) {
+      const mine = board.find((r) => isAddressEqual(r.owner, fixture.owner));
+      if (mine) {
+        mine.burnedRf += burnedDeltaRf;
+        mine.actions += actionsDelta;
+        mine.lastActionAt = lastActionAt;
+      } else {
+        board.push({ owner: fixture.owner, burnedRf: burnedDeltaRf, actions: actionsDelta, lastActionAt });
+      }
+      board.sort((a, b) => b.burnedRf - a.burnedRf);
+    }
+    return { ...base, totals: { ...base.totals, burnedRf: base.totals.burnedRf + burnedDeltaRf }, leaderboard: board };
+  };
+
   return {
+    timeScale,
+    fixture,
+
     async protocolState() {
-      return protocol;
+      return { ...protocol, timestamp: Math.floor(nowS()) };
     },
     async friend(collection, tokenId) {
       const f = find(collection, tokenId);
@@ -347,38 +480,41 @@ export function createMockSource(): MockSource {
       return f;
     },
     async household(owner): Promise<Household> {
-      const mine = isAddressEqual(owner, DEMO_OWNER);
+      const mine = isAddressEqual(owner, fixture.owner);
       return {
         owner,
-        friends: mine ? friends.slice() : [],
+        friends: mine ? current() : [],
         eggTokenId: mine ? egg : null,
         rfBalance: mine ? rfBalance : 0n,
         rfAllowance: mine ? rfAllowance : 0n,
       };
     },
     async snapshot() {
-      return { ...snapshot, leaderboard: snapshot.leaderboard.map((r) => ({ ...r })) };
+      return overlay(await loadBaseSnapshot());
     },
     async sprite(friend): Promise<Sprite> {
-      return spriteFromPose(friend.collection === "Generations" && friend.tokenId === 1969n ? FRIEND_1969_FRAME : GENERIC_FRAME);
+      const key = friendKey(friend.collection, friend.tokenId);
+      const sprite = fixture.sprites.get(key) ?? hatchedSprites.get(key);
+      if (!sprite) throw new SourceError("not-found", `${friend.collection} #${friend.tokenId} has no sprite in the demo`);
+      return sprite;
     },
     simulate(action) {
       let line = "";
       for (const tx of action.txs) {
-        const result = isAddressEqual(tx.to, ADDRESSES.rf) ? applyErc20(tx.data) : isAddressEqual(tx.to, ADDRESSES.activationManager) ? applyManager(tx.data) : "";
+        const result = isAddressEqual(tx.to, ADDRESSES.rf)
+          ? applyErc20(tx.data)
+          : isAddressEqual(tx.to, ADDRESSES.activationManager)
+            ? applyManager(tx.data)
+            : action.kind === "withdraw"
+              ? applyAccount(tx.to, tx.data)
+              : "";
         if (result) line = line ? `${line}; ${result}` : result;
       }
       return line || `Nothing to do for ${action.label}`;
     },
     reset() {
-      friends = initialFriends();
-      protocol = initialProtocol();
-      egg = FIRST_EGG;
-      rfBalance = DEMO_RF_BALANCE;
-      rfAllowance = 0n;
-      burnedByHousehold = HOUSEHOLD_RANK_BURNED_RF;
-      householdActions = 24;
-      snapshot = initialSnapshot();
+      init();
+      baseSnapshot = null;
     },
   };
 }

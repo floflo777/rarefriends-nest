@@ -99,3 +99,60 @@ export function wrap(s: string, cols: number, maxLines: number): string[] {
   kept[maxLines - 1] = `${fit(kept[maxLines - 1] ?? "", cols - 2).trimEnd()}..`;
   return kept;
 }
+
+/** Word-wraps without truncating: returns every row, however many. */
+export function wrapAll(s: string, cols: number): string[] {
+  return wrap(s, cols, Number.MAX_SAFE_INTEGER);
+}
+
+/** Words that must not end a shortened sentence. */
+const DANGLING = new Set(["a", "an", "and", "as", "at", "by", "for", "from", "in", "into", "its", "of", "on", "or", "own", "so", "than", "the", "this", "to", "with"]);
+
+function tidy(s: string): string {
+  return s
+    .replace(/\s+/g, " ")
+    .replace(/[\s,;:(]+$/g, "")
+    .trim();
+}
+
+/**
+ * Fits a sentence into `maxLines` full rows with no `..` marker. In order: the whole
+ * sentence; the sentence without parentheticals; its last clause (after `:` or `;`, the
+ * conclusion) when it has at least three words; its first clause; otherwise the sentence
+ * shortened word by word from the end, never ending on a dangling word or punctuation.
+ */
+export function fitSentence(s: string, cols: number, maxLines: number): string[] {
+  const fits = (t: string): string[] | null => {
+    const lines = wrapAll(t, cols);
+    return lines.length <= maxLines && lines.every((l) => l.length <= cols) ? lines : null;
+  };
+  const whole = tidy(s);
+  if (whole.length === 0) return [];
+  const direct = fits(whole);
+  if (direct) return direct;
+
+  const noParens = tidy(whole.replace(/\s*\([^)]*\)/g, ""));
+  const candidates: string[] = [];
+  if (noParens !== whole) candidates.push(noParens);
+  const clauses = noParens.split(/\s*[:;]\s+/).map(tidy).filter((c) => c.length > 0);
+  if (clauses.length > 1) {
+    // A clause stands alone only when it says something: three words or more.
+    const last = clauses[clauses.length - 1]!;
+    if (last.split(" ").length >= 3) candidates.push(last[0]!.toUpperCase() + last.slice(1));
+    const first = clauses[0]!;
+    if (first.split(" ").length >= 3) candidates.push(first);
+  }
+  for (const c of candidates) {
+    const lines = fits(c);
+    if (lines) return lines;
+  }
+
+  const words = noParens.replace(/[.!?]+$/, "").split(" ");
+  while (words.length > 1) {
+    words.pop();
+    while (words.length > 1 && DANGLING.has(words[words.length - 1]!.toLowerCase().replace(/[^a-z']/g, ""))) words.pop();
+    const lines = fits(tidy(words.join(" ")));
+    if (lines) return lines;
+  }
+  return wrapAll(words[0] ?? "", cols).slice(0, maxLines);
+}

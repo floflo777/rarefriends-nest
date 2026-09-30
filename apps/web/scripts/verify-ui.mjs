@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Drives a running build (default http://127.0.0.1:4173) with Chromium and saves screenshots
 // to docs/screenshots. Checks: /pet/gen/1969 renders a non-blank LCD with a name and a hunger
-// bar from live chain data; /demo runs Feed -> SIMULATED toast; /ledger shows the snapshot or
-// the "not built yet" state; /card/gen/1969 draws the card.
+// bar from live chain data, and its HOME screen shows the tokenURI scene as an <img> with a
+// data URL; /demo runs Feed -> SIMULATED toast and a paid CONFIRM (Train) opens on NO; /ledger
+// shows the snapshot or the "not built yet" state; /card/gen/1969 draws the card; the landing
+// page carries a live LCD and the three entry points.
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -59,7 +61,33 @@ check(pet.some((l) => /^HUNGER BAR \d+%$/.test(l)), "pet: hunger bar present");
 check(pet.includes("G1 T2"), "pet: G1 T2 from chain");
 check((await litPixels(page)) > 200, "pet: LCD is not blank");
 check(await waitForSprite(page), "pet: on-chain sprite drawn (registry frames)");
+check(pet.includes("RO"), "pet: RO tag in the header (visitor mode)");
+check(pet.some((l) => /^TIER \d\/4$/.test(l)) && pet.some((l) => /^GEN BAND \d\/6$/.test(l)), "pet: tier pips and generation band");
 await page.screenshot({ path: resolve(OUT, "pet.png") });
+
+// 1b. HOME: the on-chain scene, in colour, as an <img> with a data URL.
+await page.getByRole("button", { name: "Right" }).click();
+await waitForText(page, (t) => t.some((l) => l.startsWith("ON-CHAIN SCENE")));
+const sceneImg = page.locator("img.lcd-scene-img");
+let sceneSrc = "";
+try {
+  await sceneImg.waitFor({ timeout: 90_000 });
+  sceneSrc = (await sceneImg.getAttribute("src")) ?? "";
+} catch {
+  console.log("home transcript:", await lcdText(page));
+}
+check(sceneSrc.startsWith("data:"), `home: <img> with a data URL (${sceneSrc.slice(0, 40)}...)`);
+check((await lcdText(page)).some((l) => /^ON-CHAIN SCENE . GEN \d$/.test(l)), "home: caption ON-CHAIN SCENE · GEN N");
+await page.screenshot({ path: resolve(OUT, "home.png") });
+
+// 1c. RANK in visitor mode says OWNER, never YOU, and prints the index coverage.
+for (let i = 0; i < 4; i++) await page.getByRole("button", { name: "Right" }).click();
+const rank = await waitForText(page, (t) => t.includes("NEST RANK"));
+console.log("rank transcript:", rank);
+check(rank.some((l) => l.startsWith("OWNER")) && !rank.some((l) => l.startsWith("YOU")), "rank: OWNER row in visitor mode");
+check(rank.some((l) => /^SINCE BLK [\d.]+[MK]$/.test(l)), "rank: SINCE BLK coverage line");
+check(rank.some((l) => /^(PARTIAL|FULL) INDEX/.test(l)), "rank: PARTIAL/FULL INDEX line");
+await page.screenshot({ path: resolve(OUT, "rank.png") });
 
 // 2. Demo: Feed -> SIMULATED toast.
 await page.goto(`${BASE}/demo`);
@@ -70,14 +98,28 @@ const ok = page.getByRole("button", { name: "OK" });
 await ok.click();
 const care = await waitForText(page, (t) => t.some((l) => l.includes("FEED #1969")));
 check(care.some((l) => l.includes("FEED #1969")), "demo: CARE menu opens on Feed");
+check(care.some((l) => /^> FEED #1969 FREE$/.test(l)), "demo: CARE row keeps the cost column clear");
+check(care.includes("SIM"), "demo: SIM tag in the CARE header");
+// A paid action (Train) opens on NO; two-line header; no '..' truncation.
+await page.getByRole("button", { name: "Right" }).click();
+await ok.click();
+const paid = await waitForText(page, (t) => t[0] === "TRAIN #1969");
+check(paid.includes("SELECTED NO"), "demo: paid CONFIRM defaults to NO");
+check(paid.includes("\u2192 TIER 3"), "demo: CONFIRM target line");
+check(!paid.some((l) => l.endsWith("..")), "demo: no '..' truncation on CONFIRM");
+await page.screenshot({ path: resolve(OUT, "demo-confirm-paid.png") });
+await ok.click(); // NO -> back to CARE on Train
+await page.getByRole("button", { name: "Left" }).click(); // cursor back to Feed
 await ok.click();
 const confirm = await waitForText(page, (t) => t.includes("COST FREE"));
-check(confirm.includes("[ YES ]"), "demo: CONFIRM offers YES");
+check(confirm.includes("[ YES ]") && confirm.includes("SELECTED YES"), "demo: free CONFIRM (Feed) offers YES");
 await page.screenshot({ path: resolve(OUT, "demo-confirm.png") });
 await ok.click();
-await page.getByRole("status").filter({ hasText: /^SIMULATED: Fed #1969/ }).waitFor({ timeout: 10_000 });
-const toast = await page.getByRole("status").textContent();
-check(toast.startsWith("SIMULATED: Fed #1969"), `demo: toast "${toast}"`);
+// The device's own toast (the demo page adds a second status line for its dry-run note).
+const toastArea = page.locator(".toast-area");
+await toastArea.filter({ hasText: /Fed #1969/ }).waitFor({ timeout: 10_000 });
+const toast = (await toastArea.textContent()) ?? "";
+check(toast.startsWith("SIMULATED:") && /Fed #1969/.test(toast), `demo: toast "${toast.slice(0, 80)}"`);
 await page.screenshot({ path: resolve(OUT, "demo.png") });
 
 // 3. Ledger: snapshot or a clear "not built yet".
@@ -88,12 +130,28 @@ check(ledger.some((l) => /^HARDWIRED [\d,]+$/.test(l)) || ledger.includes("NOT B
 check(ledger.some((l) => /^BURNED [\d.]+M RF$/.test(l)) || ledger.includes("BURNED NO SIGNAL") || ledger.includes("BURNED -"), "ledger: live burned-to-date row");
 await page.screenshot({ path: resolve(OUT, "ledger.png") });
 
+check(ledger.some((l) => /^SINCE BLK [\d.]+[MK]( PARTIAL| FULL)?$/.test(l)) || ledger.includes("NOT BUILT YET"), "ledger: coverage line");
+
 // 4. Card.
 await page.goto(`${BASE}/card/gen/1969`);
 await page.locator('canvas.card[data-ready="true"]').waitFor({ timeout: 90_000 });
 await page.waitForTimeout(300);
 await page.screenshot({ path: resolve(OUT, "card.png") });
 check(true, "card: drawn");
+
+// 5. Landing: live LCD of #1969 above the three entry points.
+await page.goto(`${BASE}/`);
+await waitForText(page, (t) => t.includes("G1 T2") || t.includes("NO SIGNAL"));
+check(await page.getByRole("link", { name: "Try the demo (no wallet)" }).isVisible(), "landing: primary demo button");
+check(await page.getByRole("button", { name: "Look up a Friend" }).isVisible(), "landing: look-up form");
+check(await page.getByRole("button", { name: /Connect wallet/ }).isVisible(), "landing: connect wallet (tertiary)");
+check(await page.getByRole("link", { name: "Ledger" }).isVisible() && (await page.getByRole("link", { name: "GitHub" }).isVisible()), "landing: Ledger and GitHub links");
+await page.screenshot({ path: resolve(OUT, "landing.png"), fullPage: true });
+await page.setViewportSize({ width: 360, height: 740 });
+await page.waitForTimeout(300);
+const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+check(!overflow, "landing: no horizontal overflow at 360px");
+await page.screenshot({ path: resolve(OUT, "landing-mobile.png"), fullPage: true });
 
 await browser.close();
 if (failures.length > 0) {

@@ -6,6 +6,7 @@
  */
 import type { Address } from "viem";
 import type { Collection, Friend, Household, ProtocolState, Snapshot, Sprite } from "@nest/core";
+import type { TokenScene } from "../model/scene.js";
 
 export type SourceErrorCode = "egg" | "not-found" | "unavailable";
 
@@ -31,6 +32,8 @@ export interface NestDataSource {
   snapshot(): Promise<Snapshot>;
   /** The Friend's 64 on-chain frames (idle 0..31, walk 32..63). */
   sprite(friend: Friend): Promise<Sprite>;
+  /** The Friend's official `tokenURI` scene (HOME screen). Sources without one show SCENE UNAVAILABLE. */
+  scene?(friend: Friend): Promise<TokenScene>;
 }
 
 /** URL slug <-> core collection name. */

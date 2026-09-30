@@ -33,25 +33,27 @@ Rewards: the 50% side plus 5% of WETH market fees stream over 7 days to every ac
 | Action | Cost RF | Δ weight | RF/week gained | Break-even |
 |---|---|---|---|---|
 | Genesis activation | 100,000 | +2,000,000 | 15,997 | **6.3 weeks** |
+| Gen-1 tier 3→4 | 168,750 | +345,937.5 | 2,764 | 61 weeks (the shortest Generations break-even) |
 | Gen-1 tier 0→1 | 50,000 | +95,000 | 760 | 66 weeks |
 | Gen-1 hardwire | 100,000 | +175,000 | 1,400 | 71 weeks |
 | Gen-3 tier 3→4 | 1,687.5 | +2,700 | 21.6 | 78 weeks |
 | Gen-6 promote → 5 | 9 | +10.9 | 0.087 | 103 weeks |
 | Gen-6 tier 0→1 | 0.5 | +0.59 | 0.005 | 106 weeks |
+| Gen-6 hardwire | 1 | +1.1 | 0.0088 | 114 weeks (the longest) |
 
-Formula: break-even weeks = cost ÷ (Δweight ÷ totalWeight × weekly stream). Weights are roughly proportional to cost by design, so every Generations action clusters around 65–106 weeks; only Genesis activation is a yield play. Nest shows this number before every payment. That honesty is the point: a Generations holder who raises a Friend is buying a bigger pet, a bigger on-chain world, permanent weight, and a rank, not a yield. Half of what they pay funds everyone else's pet, including their own.
+Formula: break-even weeks = cost ÷ (Δweight ÷ (totalWeight + Δweight) × weekly stream), the Steward's own maths. Over all 35 Generations actions (6 hardwires, 24 tier upgrades, 5 promotions from tier 0) at total weight 1,068,713,094 and stream 8,547,984 RF, the range is **61.0 to 113.7 weeks**; only Genesis activation is a yield play. Nest shows this number before every payment. That honesty is the point: a Generations holder who raises a Friend is buying a bigger pet, a bigger on-chain world, permanent weight, and a rank, not a yield. Half of what they pay funds everyone else's pet, including their own.
 
 ## Where the burn is
 
 1. **The unraised majority.** 40,703 Gen-6 Friends exist. Raising each one step (→ Gen-5) burns 4.5 RF: 183k RF if all did it. Raising them to Gen-4 burns 49.5 RF each: 2.0M RF. One holder taking one Friend from Gen-6 to Gen-1 burns 50,000 RF, thirty-three times the *daily* burn that the strongest minigame submission models for a thousand players.
 2. **Sleeping Genesis.** Census on 2026-09-30: 495 Genesis activated, 529 not, of which 411 sit in the reserve and **118 are in 102 holders' wallets, inactive**. Each is a 50,000 RF burn with a 6-week payback waiting for a nudge: 5.9M RF in total, 7.7% of everything burned since launch. Nest's Wake button is that nudge, with the number attached.
-3. **Recurring care.** Claims cost nothing and reset hunger. Hatching an egg costs 1 RF (0.5 burned) and adds a pup: the cheapest recurring action, and every pup is a new active position that can later be raised.
+3. **Recurring care.** Claims cost nothing and reset hunger (the Steward flags claims under 0.5 RF as not worth gas yet). Hatching an egg costs the denomination your wallet balance selects, 1 RF for a Gen-6 (0.5 burned) up to 100,000 RF for a Gen-1: the protocol picks the highest generation the balance affords, so Save exists to park RF in a pet's wallet and hatch a cheaper pup on purpose, and Withdraw takes it back. Every pup is a new active position that can later be raised.
 
 ## Is this a game a holder wants to play?
 
 - **Daily reason to open it:** the pet is hungry when rewards pile up (a real, growing number); feeding is one tap and lands real RF/WETH in the pet's wallet.
 - **Something to want:** the next generation (visible on the on-chain art: more land), the next tier (visible in weight and weekly income), the next pup, the next rank.
-- **Something to compare:** Nest Rank orders households by real RF burned, indexed from the chain. Nobody can fake it.
+- **Something to compare:** Nest Rank orders households by RF burned, indexed from the chain and computed from chain state; the index's coverage (first block, share of the total burn) is shown on screen.
 - **Something kept:** every RF spent bought permanent weight in an NFT that carries its own wallet and sells with it. Nothing is spent "into the game".
 - **Nothing hidden:** the Steward's break-even is on every confirmation; the burn and reward halves are on every confirmation.
 

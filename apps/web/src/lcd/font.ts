@@ -68,6 +68,12 @@ const RAW: Record<string, string[]> = {
   "*": ["#.#", ".#.", "###", ".#.", "#.#"],
   /** Filled circle: the OK button glyph. */
   "@": [".#.", "###", "###", "###", ".#."],
+  /** Right arrow: the CONFIRM target line. */
+  "\u2192": ["...", "..#", "###", "..#", "..."],
+  /** Middle dot: separator. */
+  "\u00b7": ["...", "...", ".#.", "...", "..."],
+  /** Tilde: a label shortened before its cost column. */
+  "~": ["...", "#..", "###", "..#", "..."],
   /** Left/right triangles: the arrow buttons. */
   "{": ["..#", ".##", "###", ".##", "..#"],
   "}": ["#..", "##.", "###", "##.", "#.."],

@@ -11,7 +11,7 @@ import type { Address } from "viem";
 import { isAddress } from "viem";
 import {
   ADDRESSES, FAMILIES_REGISTRY_ABI, FAMILY_NAMES,
-  createNestClient, readProtocolState, readFriend, readHousehold, planHousehold, dryRunAll,
+  createNestClient, readProtocolState, readFriend, readHousehold, readTokenMetadata, planHousehold, dryRunAll,
   decodeFrames, frameToAscii, computeVitals, describe, moodState, speechLine, weiToRf,
   type Collection, type Friend, type ProtocolState, type StewardAction, type Snapshot,
 } from "@nest/core";
@@ -19,8 +19,9 @@ import {
 const HELP = `nest — Rare Friends Nest command line (read-only, dry-run only)
 
   nest state <gen|genesis> <tokenId> [--json]     one Friend: identity, position, rewards, savings, vitals, personality, sprite
+  nest meta <gen|genesis> <tokenId> [--json]      the NFT's own tokenURI: name, description, image / animation data-URL sizes
   nest household <address> [--json]               every Friend the wallet owns, plus the egg and RF balance
-  nest plan <address> [--dry-run] [--json]        Steward plan ranked by break-even; --dry-run simulates each tx from the owner
+  nest plan <address> [--dry-run] [--json]        Steward plan (claims, paid by break-even, withdraws, negligible claims); --dry-run simulates each tx from the owner
   nest census [--json]                            live protocol state and the indexed snapshot (burns, ranks, censuses)
   nest dryrun-doc <address>...                    Markdown table of dry-run results for docs/dry-run.md
 
@@ -54,29 +55,37 @@ async function spriteAscii(client: ReturnType<typeof createNestClient>, friend: 
 
 function describeFriend(friend: Friend, state: ProtocolState, now: number) {
   const vitals = computeVitals(friend, state, now);
-  const personality = friend.collection === "Generations" ? describe(friend) : null;
-  const mood = personality ? moodState(vitals, personality, now) : "content";
-  const line = personality ? speechLine(personality, mood, vitals, now) : "";
+  const personality = describe(friend); // Generations: registry family + seed; Genesis: its own tables, seed = token id
+  const mood = moodState(vitals, personality, now);
+  const line = speechLine(personality, mood, vitals, now);
   return { vitals, personality, mood, line };
 }
 
 function printFriend(friend: Friend, state: ProtocolState, ascii: string | null, now: number): void {
   const { vitals, personality, mood, line } = describeFriend(friend, state, now);
-  const fam = friend.family !== undefined ? FAMILY_NAMES[friend.family] : "—";
+  const fam = friend.familyName ?? (friend.family !== undefined ? FAMILY_NAMES[friend.family] : "—");
   console.log(`${friend.collection} #${friend.tokenId}  owner ${friend.owner}  wallet ${friend.wallet}`);
   console.log(`generation ${friend.generation || "Genesis"}  tier ${friend.position.tier}  active ${friend.position.active}  weight ${rf(friend.position.weight)}  family ${fam}`);
   console.log(`unclaimed ${rf(friend.rewards.earnedRf)} RF, ${weiToRf(friend.rewards.earnedWeth).toFixed(6)} WETH   savings ${rf(friend.savings.rf)} RF, ${weiToRf(friend.savings.weth).toFixed(6)} WETH, ${weiToRf(friend.savings.eth).toFixed(6)} ETH`);
   console.log(`stream share ${(vitals.streamShare * 100).toFixed(6)}%  weekly ${vitals.weeklyRfFromStream.toFixed(3)} RF  hunger ${vitals.hunger.toFixed(2)}  mood ${mood}`);
-  if (personality) console.log(`name ${personality.name}  ${personality.temperament}  favourite hour ${personality.favouriteHour}h UTC  says: "${line}"`);
+  console.log(`name ${personality.name}  ${personality.temperament}  favourite hour ${personality.favouriteHour}h UTC  habit: ${personality.secretHabit}  says: "${line}"`);
   if (ascii) console.log(ascii);
 }
 
 function printPlan(actions: StewardAction[]): void {
   for (const a of actions) {
     const be = a.breakEvenWeeks === null ? "—" : `${a.breakEvenWeeks.toFixed(1)} wk`;
-    console.log(`${a.kind.padEnd(6)} ${a.label.padEnd(44)} cost ${a.costRf.toLocaleString("en-US").padStart(10)} RF  burn ${a.burnRf.toLocaleString("en-US").padStart(9)}  +weight ${a.deltaWeight.toLocaleString("en-US").padStart(10)}  break-even ${be}`);
-    console.log(`       ${a.rationale}`);
+    const flag = a.negligible === true ? "  [negligible]" : a.kind === "withdraw" ? "  [withdraw: no spend]" : "";
+    console.log(`${a.kind.padEnd(8)} ${a.label.padEnd(48)} cost ${a.costRf.toLocaleString("en-US").padStart(10)} RF  burn ${a.burnRf.toLocaleString("en-US").padStart(9)}  +weight ${a.deltaWeight.toLocaleString("en-US").padStart(10)}  break-even ${be}${flag}`);
+    console.log(`         ${a.rationale}`);
   }
+}
+
+function dataUrlInfo(url: string | null): string {
+  if (url === null) return "none";
+  const head = url.slice(0, url.indexOf(",") + 1);
+  const isSvg = /^data:image\/svg\+xml/i.test(url);
+  return `${head.length > 0 ? head : url.slice(0, 40)}  ${url.length.toLocaleString("en-US")} chars${isSvg ? "  (SVG)" : ""}`;
 }
 
 function loadSnapshot(): Snapshot | null {
@@ -101,6 +110,18 @@ async function main(argv: string[]): Promise<number> {
     const ascii = await spriteAscii(client, friend);
     if (values.json) { console.log(json({ state, friend, ...describeFriend(friend, state, now), sprite: ascii })); return 0; }
     printFriend(friend, state, ascii, now); return 0;
+  }
+  if (cmd === "meta") {
+    const collection = parseCollection(rest[0]);
+    const tokenId = BigInt(rest[1] ?? "0");
+    const meta = await readTokenMetadata(client, collection, tokenId);
+    if (values.json) { console.log(json({ collection, tokenId, ...meta, imageChars: meta.imageDataUrl?.length ?? 0, animationChars: meta.animationDataUrl?.length ?? 0 })); return 0; }
+    console.log(`${collection} #${tokenId}  tokenURI`);
+    console.log(`name         ${meta.name}`);
+    console.log(`description  ${meta.description}`);
+    console.log(`image        ${dataUrlInfo(meta.imageDataUrl)}`);
+    console.log(`animation    ${dataUrlInfo(meta.animationDataUrl)}`);
+    return 0;
   }
   if (cmd === "household") {
     const owner = parseAddress(rest[0]);

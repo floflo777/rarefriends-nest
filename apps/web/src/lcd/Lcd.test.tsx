@@ -4,7 +4,7 @@ import { asciiToFrame, blitFrame, lcdToAscii } from "@nest/core";
 import { FRIEND_1969_FRAME } from "../data/mock.js";
 import { contextOf } from "../test/setup.js";
 import { Lcd } from "./Lcd.jsx";
-import { COLS, LCD_H, LCD_W, createPainter, imageOf, row, text, wrap } from "./paint.js";
+import { COLS, LCD_H, LCD_W, createPainter, fitSentence, imageOf, row, text, wrap } from "./paint.js";
 
 describe("Lcd", () => {
   it("mounts a 96x64 canvas at an integer scale, blits the buffer and exposes the transcript", () => {
@@ -46,5 +46,26 @@ describe("Lcd", () => {
     expect(cut).toHaveLength(2);
     expect(cut[1]?.endsWith("..")).toBe(true);
     expect(wrap("", COLS, 2)).toEqual([]);
+  });
+
+  it("fitSentence never cuts with ..: whole sentence, else the conclusion clause, else a clean word boundary", () => {
+    const honesty = "Pays for itself in 63 weeks at the current stream: this is a collector's spend, not a yield play.";
+    expect(fitSentence(honesty, 23, 3)).toEqual(["This is a collector's", "spend, not a yield", "play."]);
+    // Parenthetical dropped first; then the conclusion clause (the weeks are on the BREAK-EVEN row).
+    expect(fitSentence("Pays for itself in 6.3 weeks at the current stream: cheap for what it adds (2000.0 RF a week).", 23, 3)).toEqual(["Cheap for what it adds."]);
+    expect(fitSentence("Pays for itself in 63 weeks at the current stream.", 23, 3)).toEqual(["Pays for itself in 63", "weeks at the current", "stream."]);
+    const claim = "Free: moves 36189.00 RF and 0.022800 WETH of unclaimed rewards into the Friend's own wallet (gas only).";
+    const lines = fitSentence(claim, 23, 3);
+    expect(lines).toHaveLength(3);
+    expect(lines.every((l) => l.length <= 23 && !l.endsWith(".."))).toBe(true);
+    expect(["the", "into", "of", "and"]).not.toContain(lines[2]!.split(" ").pop()!.toLowerCase());
+    expect(fitSentence("Short.", 23, 3)).toEqual(["Short."]);
+    expect(fitSentence("", 23, 3)).toEqual([]);
+  });
+
+  it("renders the arrow, middle dot and tilde glyphs instead of the unknown-glyph dot", () => {
+    const p = createPainter();
+    text(p, 0, 0, "\u2192");
+    expect(lcdToAscii(p.lcd).split("\n").slice(0, 5).map((r) => r.slice(0, 3))).toEqual(["...", "..#", "###", "..#", "..."]);
   });
 });

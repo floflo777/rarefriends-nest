@@ -100,6 +100,14 @@ export const FAMILIES_REGISTRY_ABI = parseAbi([
   "function portrait(uint8 id, uint32 seed) view returns (uint256)",
 ]);
 
+/**
+ * ERC-6551 account (the Friend's wallet). Only the owner of the NFT may call `execute`;
+ * operation 0 = CALL. Used by the Steward's Withdraw to move savings back to the owner.
+ */
+export const ERC6551_ACCOUNT_ABI = parseAbi([
+  "function execute(address to, uint256 value, bytes data, uint8 operation) payable returns (bytes)",
+]);
+
 export const FAMILY_NAMES = ["Skeleton", "Mask", "Family", "Cellular", "Asymmetry", "Hoverer", "Colossus", "Sparkling", "Hollow"] as const;
 export type FamilyName = (typeof FAMILY_NAMES)[number];
 

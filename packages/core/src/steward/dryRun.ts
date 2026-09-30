@@ -7,7 +7,7 @@ import type { Address, Hex } from "viem";
 import type { DryRunResult, PreparedTx } from "../types.js";
 import { errorChain, withRetry, type NestClient } from "../chain/client.js";
 
-/** OpenZeppelin 5 custom errors the protocol contracts can surface. */
+/** OpenZeppelin 5 custom errors the protocol contracts can surface; NotAuthorized is the ERC-6551 account's (execute by a non-owner). */
 export const REVERT_ABI = parseAbi([
   "error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed)",
   "error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed)",
@@ -21,6 +21,7 @@ export const REVERT_ABI = parseAbi([
   "error UnexpectedGeneration()",
   "error NoTemporaryFriend()",
   "error NotTokenOwner()",
+  "error NotAuthorized()",
 ]);
 
 const SIGNATURES = [
@@ -36,6 +37,7 @@ const SIGNATURES = [
   "UnexpectedGeneration()",
   "NoTemporaryFriend()",
   "NotTokenOwner()",
+  "NotAuthorized()",
   "Error(string)",
   "Panic(uint256)",
 ] as const;

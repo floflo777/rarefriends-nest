@@ -1,11 +1,12 @@
 /** Shareable pet card: a 1200x630 PNG drawn on a canvas, with a Download button. */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { FRAME_SIZE, describe, frameToRows, streamShare, weiToRf, type Friend, type PetFrame, type ProtocolState, type Snapshot } from "@nest/core";
+import { FRAME_SIZE, frameToRows, streamShare, weiToRf, type Friend, type PetFrame, type ProtocolState, type Snapshot } from "@nest/core";
 import { useDataSource } from "../data/context.jsx";
 import { createMockSource } from "../data/mock.js";
 import { collectionFromSlug, parseTokenId, type NestDataSource } from "../data/source.js";
 import { grouped, percent } from "../model/format.js";
+import { identityOf } from "../model/pet.js";
 
 const W = 1200;
 const H = 630;
@@ -40,13 +41,14 @@ export function drawCard(ctx: CanvasRenderingContext2D, d: CardData): void {
   }
 
   const tx = 540;
-  const personality = describe(friend);
+  const identity = identityOf(friend);
   ctx.textBaseline = "top";
   ctx.font = `bold 84px ${MONO}`;
-  ctx.fillText(personality.name, tx, 70);
+  ctx.fillText(identity.name, tx, 70);
   ctx.font = `34px ${MONO}`;
   const gen = friend.collection === "Genesis" ? "Genesis" : `Generation ${friend.generation}`;
-  ctx.fillText(`${friend.familyName ?? personality.family} family`, tx, 175);
+  const family = identity.familyLabel.charAt(0) + identity.familyLabel.slice(1).toLowerCase();
+  ctx.fillText(friend.collection === "Genesis" ? "Genesis, no family" : `${family} family`, tx, 175);
   ctx.fillText(`${gen}  ·  Tier ${friend.position.tier}`, tx, 222);
 
   ctx.font = `30px ${MONO}`;

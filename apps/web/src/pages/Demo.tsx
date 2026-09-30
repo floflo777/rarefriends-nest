@@ -1,12 +1,34 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { createNestClient, type StewardAction } from "@nest/core";
 import { DataSourceProvider } from "../data/context.jsx";
-import { createMockSource, DEMO_OWNER } from "../data/mock.js";
+import { createLiveSource } from "../data/live.js";
+import { DEMO_OWNER, DEMO_TIME_SCALE, createMockSource } from "../data/mock.js";
 import { Device } from "../device/Device.jsx";
+import { shortAddress } from "../model/format.js";
+import { runDemo, type DemoPhase } from "../screens/run.js";
 
-/** A simulated household: the same planner, vitals and screens as live mode, applied to fixtures. */
+function phaseText(phase: DemoPhase): string {
+  if (phase.phase === "simulating") return `SIMULATING ON CHAIN… dry-run from ${shortAddress(phase.from, 4)}, nothing is sent`;
+  return phase.line;
+}
+
+/**
+ * The demo: a real household baked from the chain (real Friends, sprites, balances and
+ * census), simulated actions. Confirming YES dry-runs the exact calldata on the live RPC
+ * before the local mutation; the wallet is never asked for anything.
+ */
 export function DemoPage() {
-  const mock = useMemo(() => createMockSource(), []);
+  const live = useMemo(() => createLiveSource(createNestClient()), []);
+  const mock = useMemo(() => createMockSource({ snapshot: () => live.snapshot() }), [live]);
+  const [phase, setPhase] = useState<DemoPhase | null>(null);
+  const onSimulate = useCallback(
+    (action: StewardAction) => runDemo(action, { client: live.client, owner: DEMO_OWNER, simulate: (a) => mock.simulate(a), onPhase: setPhase }).then((r) => r.line),
+    [live, mock],
+  );
+  const { fixture } = mock;
+  const baked = new Date(fixture.bakedAt * 1000).toISOString().slice(0, 10);
+
   return (
     <DataSourceProvider source={mock}>
       <main className="page">
@@ -14,13 +36,25 @@ export function DemoPage() {
           source={mock}
           mode="demo"
           target={{ kind: "household", owner: DEMO_OWNER }}
-          onSimulate={(action) => mock.simulate(action)}
+          onSimulate={onSimulate}
           footer={
-            <nav className="under">
-              <Link to="/">Home</Link>
-              <Link to="/card/gen/1969?demo">Pet card</Link>
-              <Link to="/ledger">Ledger</Link>
-            </nav>
+            <>
+              <p className="hint" aria-label="Demo notice">
+                <strong>DEMO · REAL FRIENDS, SIMULATED ACTIONS</strong>
+              </p>
+              <p className="hint">
+                Household {shortAddress(DEMO_OWNER, 4)} read at block {fixture.blockNumber.toLocaleString("en-US")} on {baked} · DEMO TIME ×{DEMO_TIME_SCALE}: rewards accrue{" "}
+                {DEMO_TIME_SCALE}× faster than on chain
+              </p>
+              <p className="hint" role="status" aria-live="polite" data-testid="demo-dry-run">
+                {phase ? phaseText(phase) : "YES dry-runs the real calldata on the live RPC (eth_simulateV1) before anything moves here; nothing is ever sent"}
+              </p>
+              <nav className="under">
+                <Link to="/">Home</Link>
+                <Link to="/card/gen/1969?demo">Pet card</Link>
+                <Link to="/ledger">Ledger</Link>
+              </nav>
+            </>
           }
         />
       </main>

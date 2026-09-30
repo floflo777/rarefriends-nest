@@ -32,7 +32,9 @@ import {
   type Snapshot,
   type Sprite,
 } from "@nest/core";
-import { SourceError, type NestDataSource } from "./source.js";
+import { cachedScene, readTokenMetadata, type TokenScene } from "../model/scene.js";
+import { maxHardwiredId } from "../model/snapshot.js";
+import { SourceError, friendKey, type NestDataSource } from "./source.js";
 
 /** Reads are reused for one block. */
 export const CACHE_TTL_MS = 12_000;
@@ -146,15 +148,49 @@ export function createLiveSource(client: NestClient): LiveSource {
     return p;
   };
 
-  /** Genesis identities carry no family/seed from the collection; the registry answers for any id. */
+  /**
+   * Genesis identities carry no family/seed from the collection; the registry answers for
+   * any id (it selects the portrait), but a Genesis Friend has no Generations family: its
+   * familyName is "Genesis", as the CLI prints it.
+   */
   const withRegistry = async (friend: Friend): Promise<Friend> => {
+    if (friend.collection === "Genesis" && friend.familyName !== "Genesis") friend = { ...friend, familyName: "Genesis" };
     if (friend.family !== undefined && friend.seed !== undefined) return friend;
     const r = await registryFor(friend.tokenId);
     if (!r) return friend;
     const enriched: Friend = { ...friend, family: r.family, seed: r.seed };
-    const name = FAMILY_NAMES[r.family];
-    if (name !== undefined) enriched.familyName = name;
+    if (friend.collection === "Generations") {
+      const name = FAMILY_NAMES[r.family];
+      if (name !== undefined) enriched.familyName = name;
+    }
     return enriched;
+  };
+
+  const loadSnapshot = (): Promise<Snapshot> =>
+    memo.get("snapshot", SNAPSHOT_TTL_MS, async () => {
+      const res = await fetch(snapshotUrl(), { cache: "no-cache" });
+      if (!res.ok) throw new SourceError("unavailable", `snapshot not built yet (HTTP ${res.status})`);
+      let parsed: unknown;
+      try {
+        parsed = await res.json();
+      } catch {
+        // The SPA fallback answers index.html for a missing file.
+        throw new SourceError("unavailable", "snapshot not built yet");
+      }
+      if (typeof parsed !== "object" || parsed === null || !Array.isArray((parsed as Snapshot).leaderboard) || typeof (parsed as Snapshot).totals !== "object") {
+        throw new SourceError("unavailable", "snapshot has an unexpected shape");
+      }
+      return parsed as Snapshot;
+    });
+
+  /**
+   * The chain answers generation 0 for an unhatched egg and for an id that was never
+   * minted alike. Above the census' highest hardwired id it is the latter.
+   */
+  const eggOrMissing = async (tokenId: bigint): Promise<SourceError> => {
+    const max = await loadSnapshot().then(maxHardwiredId, () => null);
+    if (max !== null && tokenId > max) return new SourceError("not-found", `Generations #${tokenId} was never minted (highest hardwired id #${max})`);
+    return new SourceError("egg", EGG_MESSAGE);
   };
 
   const loadRefs = (owner: Address): { refs: FriendRef[]; toBlock: bigint } | null => {
@@ -237,7 +273,7 @@ export function createLiveSource(client: NestClient): LiveSource {
         try {
           return await withRegistry(await readFriend(client, collection, tokenId));
         } catch (error) {
-          if (error instanceof TemporaryFriendError) throw new SourceError("egg", EGG_MESSAGE);
+          if (error instanceof TemporaryFriendError) throw await eggOrMissing(tokenId);
           if (error instanceof FriendReadError) throw new SourceError("not-found", `${collection} #${tokenId} does not exist`);
           throw error;
         }
@@ -249,21 +285,7 @@ export function createLiveSource(client: NestClient): LiveSource {
     },
 
     snapshot(): Promise<Snapshot> {
-      return memo.get("snapshot", SNAPSHOT_TTL_MS, async () => {
-        const res = await fetch(snapshotUrl(), { cache: "no-cache" });
-        if (!res.ok) throw new SourceError("unavailable", `snapshot not built yet (HTTP ${res.status})`);
-        let parsed: unknown;
-        try {
-          parsed = await res.json();
-        } catch {
-          // The SPA fallback answers index.html for a missing file.
-          throw new SourceError("unavailable", "snapshot not built yet");
-        }
-        if (typeof parsed !== "object" || parsed === null || !Array.isArray((parsed as Snapshot).leaderboard) || typeof (parsed as Snapshot).totals !== "object") {
-          throw new SourceError("unavailable", "snapshot has an unexpected shape");
-        }
-        return parsed as Snapshot;
-      });
+      return loadSnapshot();
     },
 
     async sprite(friend): Promise<Sprite> {
@@ -272,6 +294,10 @@ export function createLiveSource(client: NestClient): LiveSource {
         return stillSprite(portraitToFrame(GENERIC_PORTRAIT));
       }
       return spriteFor(enriched.collection, enriched.family, enriched.seed);
+    },
+
+    scene(friend): Promise<TokenScene> {
+      return cachedScene(friendKey(friend.collection, friend.tokenId), () => readTokenMetadata(client, friend.collection, friend.tokenId));
     },
 
     invalidateHousehold(owner) {

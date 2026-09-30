@@ -1,11 +1,24 @@
 import { describe, expect, it } from "vitest";
 import { FAMILY_NAMES } from "../../protocol/constants.js";
 import type { MoodState, Personality, Vitals } from "../../types.js";
-import { describe as describeFriend, nameFor } from "../describe.js";
+import { describe as describeFriend, describeGenesis, familyIdOf, genesisNameFor, nameFor } from "../describe.js";
 import { seedHash, seedPick } from "../hash.js";
-import { animationFor, bedtimeHour, frameIndexAt, hourDistance, moodState, utcHour } from "../mood.js";
+import { animationFor, bedtimeHour, careEventsFromBurns, frameIndexAt, hourDistance, moodState, utcHour } from "../mood.js";
 import { speechLine, speechPool } from "../speech.js";
-import { HUNGER_THRESHOLDS, MAX_SPEECH_CHARS, SECRET_HABITS, SPEECH, SYLLABLES, TEMPERAMENTS, URGENT_LINES } from "../tables.js";
+import {
+  GENESIS_HABITS,
+  GENESIS_HUNGER_THRESHOLD,
+  GENESIS_SPEECH,
+  GENESIS_SYLLABLES,
+  GENESIS_TEMPERAMENT,
+  HUNGER_THRESHOLDS,
+  MAX_SPEECH_CHARS,
+  SECRET_HABITS,
+  SPEECH,
+  SYLLABLES,
+  TEMPERAMENTS,
+  URGENT_LINES,
+} from "../tables.js";
 
 const MOODS: readonly MoodState[] = ["content", "hungry", "restless", "proud", "sleepy", "thrifty", "asleep"];
 
@@ -88,6 +101,36 @@ describe("describe()", () => {
     expect(() => describeFriend({ tokenId: 1n }, 1, 9)).toThrow(RangeError);
   });
 
+  it("Genesis gets its own personality, never a Generations family", () => {
+    const g = describeFriend({ tokenId: 597n, collection: "Genesis" });
+    expect(g.family).toBe("Genesis");
+    expect(g.seed).toBe(597);
+    expect(g.temperament).toBe(GENESIS_TEMPERAMENT);
+    expect(g.temperament).toBe("Founder. Fixed weight, fixed gaze, nothing to prove.");
+    expect(g.hungerThreshold).toBe(GENESIS_HUNGER_THRESHOLD);
+    expect(g.hungerThreshold).toBe(0.5);
+    expect(GENESIS_HABITS).toContain(g.secretHabit);
+    for (const habits of SECRET_HABITS) expect(habits).not.toContain(g.secretHabit);
+    expect(g.name).toBe(genesisNameFor(597));
+    expect(g.name).toMatch(/^[A-Z][a-z]+$/);
+    expect(g).toEqual(describeGenesis(597));
+    // the same id as a Generations Friend is a different pet
+    expect(g.name).not.toBe(nameFor(597, 0));
+    // an explicit seed still wins; family is ignored for Genesis
+    expect(describeFriend({ tokenId: 597n, collection: "Genesis", family: 4 }, 77).seed).toBe(77);
+    // Genesis names come from the Genesis table only
+    const t = GENESIS_SYLLABLES;
+    for (let seed = 1; seed <= 100; seed++) {
+      const name = genesisNameFor(seed).toLowerCase();
+      const ok = t.onsets.some((o) => t.endings.some((e) => o + e === name) || t.middles.some((m) => t.endings.some((e) => o + m + e === name)));
+      expect(ok, name).toBe(true);
+    }
+    expect(familyIdOf("Genesis")).toBe(-1);
+    expect(familyIdOf("Asymmetry")).toBe(4);
+    // a Generations Friend is unaffected
+    expect(describeFriend({ ...FRIEND_1969, collection: "Generations" })).toEqual(describeFriend(FRIEND_1969));
+  });
+
   it("seedHash/seedPick are stable and handle big token ids", () => {
     expect(seedHash(1969, "hour")).toBe(seedHash(1969, "hour"));
     expect(seedHash(1969, "hour")).not.toBe(seedHash(1969, "habit"));
@@ -137,6 +180,26 @@ describe("moodState()", () => {
     expect(moodState(vitals({ savings: 0.5 }), p, noon, [{ action: "promote", at: noon }], 0.1)).toBe("proud");
   });
 
+  it("careEventsFromBurns keeps known actions within a week, newest first, and feeds proud", () => {
+    const events = careEventsFromBurns(
+      [
+        { timestamp: noon - 3600, action: "promote" },
+        { timestamp: noon - 10, action: "unknown" },
+        { timestamp: noon - 8 * 86_400, action: "upgrade" }, // older than a week
+        { timestamp: noon + 5, action: "upgrade" }, // in the future
+        { timestamp: noon - 100, action: "claim" },
+        { timestamp: Number.NaN, action: "hardwire" },
+      ],
+      noon,
+    );
+    expect(events).toEqual([
+      { action: "claim", at: noon - 100 },
+      { action: "promote", at: noon - 3600 },
+    ]);
+    expect(moodState(vitals(), p, noon, events)).toBe("proud");
+    expect(careEventsFromBurns([], noon)).toEqual([]);
+  });
+
   it("an inactive Friend is asleep regardless of the clock", () => {
     expect(moodState(vitals({ awake: false, hunger: 1 }), p, noon)).toBe("asleep");
   });
@@ -178,21 +241,45 @@ describe("speechLine()", () => {
     for (const line of URGENT_LINES) expect(line.length).toBeLessThanOrEqual(MAX_SPEECH_CHARS);
   });
 
-  it("is deterministic per (seed, day, mood) and comes from the family pool", () => {
+  it("is deterministic per (seed, UTC day, UTC hour, mood) and comes from the family pool", () => {
     const p = describeFriend(FRIEND_1969);
     const v = vitals({ hunger: 0.5 });
     const day = 20_000 * 86_400;
     for (const m of MOODS) {
       const line = speechLine(p, m, v, day + 100);
-      expect(line).toBe(speechLine(p, m, v, day + 80_000)); // same UTC day
+      expect(line).toBe(speechLine(p, m, v, day + 3_599)); // same UTC hour
       expect(line.length).toBeLessThanOrEqual(MAX_SPEECH_CHARS);
       expect(speechPool(p, m, v)).toContain(line);
       expect(SPEECH[4]![m]).toContain(line);
     }
-    // across many days, more than one line of the pool is used
+    // across the hours of one day, more than one line of the pool is used
+    const hours = new Set<string>();
+    for (let h = 0; h < 24; h++) hours.add(speechLine(p, "content", v, day + h * 3600));
+    expect(hours.size).toBeGreaterThan(1);
+    // across many days at the same hour too
     const seen = new Set<string>();
     for (let d = 0; d < 30; d++) seen.add(speechLine(p, "content", v, (20_000 + d) * 86_400));
     expect(seen.size).toBeGreaterThan(1);
+    // two pets with different seeds do not say the same thing all day
+    const q = describeFriend({ tokenId: 1970n, seed: 1970, family: 4 });
+    let differ = 0;
+    for (let h = 0; h < 24; h++) if (speechLine(p, "content", v, day + h * 3600) !== speechLine(q, "content", v, day + h * 3600)) differ++;
+    expect(differ).toBeGreaterThan(0);
+  });
+
+  it("Genesis speaks from its own pool, 3-5 lines per mood, <= 22 chars", () => {
+    const g = describeGenesis(597);
+    for (const m of MOODS) {
+      expect(GENESIS_SPEECH[m].length).toBeGreaterThanOrEqual(3);
+      expect(GENESIS_SPEECH[m].length).toBeLessThanOrEqual(5);
+      for (const line of GENESIS_SPEECH[m]) {
+        expect(line.length, line).toBeLessThanOrEqual(MAX_SPEECH_CHARS);
+        expect(line, line).toMatch(/^[\x20-\x7e]+$/);
+      }
+      expect(speechPool(g, m, vitals())).toEqual(GENESIS_SPEECH[m]);
+      expect(GENESIS_SPEECH[m]).toContain(speechLine(g, m, vitals(), 20_000 * 86_400));
+    }
+    expect(speechPool(g, "hungry", vitals({ hunger: 1 }))).toEqual([...GENESIS_SPEECH.hungry, ...URGENT_LINES]);
   });
 
   it("a full week unclaimed adds the urgent lines to the hungry pool", () => {

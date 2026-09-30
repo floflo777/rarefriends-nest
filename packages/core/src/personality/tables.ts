@@ -256,3 +256,38 @@ export const SPEECH: readonly Readonly<Record<MoodState, readonly string[]>>[] =
 export const URGENT_LINES: readonly string[] = ["A week unclaimed.", "Claim, please.", "Rewards overflow."];
 
 export const MAX_SPEECH_CHARS = 22;
+
+/**
+ * Genesis: the 1,024 fixed-supply founders. No registry family, so they get their own
+ * tables; the seed is the token id. Nothing here depends on the Generations tables.
+ */
+export const GENESIS_SYLLABLES: SyllableTable = {
+  onsets: ["ar", "ori", "gen", "pri", "ald", "eos", "var", "ur", "kai", "sol", "ath", "nov"],
+  middles: ["a", "en", "i", "or", "u", "an", "e", "ur", "o", "em", "is", "al"],
+  endings: ["gon", "mus", "dor", "n", "ric", "ta", "os", "an", "el", "is", "mar", "on"],
+};
+
+export const GENESIS_TEMPERAMENT = "Founder. Fixed weight, fixed gaze, nothing to prove.";
+
+/** Genesis shows hunger late: 2,000,000 weight accrues rewards fast, and it has seen streams come and go. */
+export const GENESIS_HUNGER_THRESHOLD = 0.5;
+
+export const GENESIS_HABITS: readonly string[] = [
+  "recites the first block it remembers",
+  "keeps a ledger nobody else can read",
+  "greets each new Friend by number",
+  "counts the reserve every midnight",
+  "polishes its portrait, all sixty-four pixels",
+  "never sits; founders stand",
+];
+
+/** 3-5 lines per mood, <= 22 chars, ASCII only, like SPEECH. */
+export const GENESIS_SPEECH: Readonly<Record<MoodState, readonly string[]>> = {
+  content: ["Two million. Steady.", "Founders do not fuss.", "I was here first.", "Fixed. As intended."],
+  hungry: ["Rewards accrue. Claim.", "The vault fills. Feed.", "Big weight, full bowl."],
+  restless: ["A week. Unacceptable.", "Claim it. Now.", "Founders do not wait."],
+  proud: ["As it should be.", "Weight, well placed.", "The household grows."],
+  sleepy: ["Even founders rest.", "The hour is late.", "Closing the ledger."],
+  thrifty: ["The vault grew. Good.", "Kept. Every RF.", "Founder-grade savings."],
+  asleep: ["Zzz. Since block one.", "Dormant. Not gone.", "Wake me for the claim."],
+};

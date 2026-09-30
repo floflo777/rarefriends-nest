@@ -224,6 +224,10 @@ async function readFriendBatch(client: NestClient, refs: FriendRef[], options: R
       identity.seed = seed;
       const familyName = FAMILY_NAMES[family];
       if (familyName !== undefined) identity.familyName = familyName;
+    } else {
+      // Genesis has no registry family: the personality seed is the token id.
+      identity.seed = Number(plan.ref.tokenId);
+      identity.familyName = "Genesis";
     }
     identities.push({ identity, results });
   }
@@ -268,6 +272,52 @@ export async function readFriend(client: NestClient, collection: Collection, tok
   const [friend] = await readFriends(client, [{ collection, tokenId }], options);
   if (friend === undefined) throw new FriendReadError(collection, tokenId, "empty read");
   return friend;
+}
+
+export interface TokenMetadata {
+  name: string;
+  description: string;
+  /** `image` as the contract returns it (a data: URL, SVG for both collections today), or null. */
+  imageDataUrl: string | null;
+  /** `animation_url` as returned (data: URL), or null when the collection has none. */
+  animationDataUrl: string | null;
+}
+
+function asString(v: unknown): string | null {
+  return typeof v === "string" ? v : null;
+}
+
+/** Decodes a `data:application/json;base64,...` (or plain `data:application/json,...`) tokenURI. */
+export function parseTokenUri(uri: string): TokenMetadata {
+  const m = /^data:application\/json(;[^,]*)?,(.*)$/s.exec(uri.trim());
+  if (m === null) throw new Error(`tokenURI is not a data:application/json URL (starts with ${uri.slice(0, 40)})`);
+  const params = m[1] ?? "";
+  const payload = m[2] ?? "";
+  // atob + TextDecoder: available in browsers and Node 22 alike (core has no Node-only dependency).
+  const text = /;base64/i.test(params)
+    ? new TextDecoder().decode(Uint8Array.from(atob(payload), (c) => c.charCodeAt(0)))
+    : decodeURIComponent(payload);
+  const parsed: unknown = JSON.parse(text);
+  if (typeof parsed !== "object" || parsed === null) throw new Error("tokenURI JSON is not an object");
+  const o = parsed as Record<string, unknown>;
+  return {
+    name: asString(o["name"]) ?? "",
+    description: asString(o["description"]) ?? "",
+    imageDataUrl: asString(o["image"]),
+    animationDataUrl: asString(o["animation_url"]),
+  };
+}
+
+/**
+ * The NFT's own metadata from `tokenURI(id)`: name, description and the on-chain `image` /
+ * `animation_url` data URLs, returned as-is (no fetch, no rewrite). Generations embeds the
+ * scene (land grows with generation); Genesis embeds the 8x8 portrait.
+ */
+export async function readTokenMetadata(client: NestClient, collection: Collection, tokenId: bigint): Promise<TokenMetadata> {
+  const address = collectionAddress(collection);
+  const abi = collection === "Generations" ? GENERATIONS_ABI : GENESIS_ABI;
+  const uri = await withRetry(() => client.readContract({ address, abi, functionName: "tokenURI", args: [tokenId] }));
+  return parseTokenUri(uri);
 }
 
 export function isLogLimitError(error: unknown): boolean {

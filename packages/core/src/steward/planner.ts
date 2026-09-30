@@ -6,7 +6,7 @@
 import { encodeFunctionData } from "viem";
 import type { Address, Hex } from "viem";
 import type { Friend, Household, PreparedTx, ProtocolState, StewardAction, StewardActionKind } from "../types.js";
-import { ACTIVATION_MANAGER_ABI, ADDRESSES, ERC20_ABI } from "../protocol/constants.js";
+import { ACTIVATION_MANAGER_ABI, ADDRESSES, ERC20_ABI, ERC6551_ACCOUNT_ABI } from "../protocol/constants.js";
 import {
   MAX_TIER,
   activateCostWei,
@@ -20,6 +20,7 @@ import {
   weightFor,
   hardwireGenerationFor,
   hardwireCostRf,
+  upgradeCostRf,
 } from "../protocol/math.js";
 import { collectionAddress } from "../chain/reads.js";
 
@@ -31,6 +32,14 @@ export interface PlanOptions {
 }
 
 const AM: Address = ADDRESSES.activationManager;
+
+/**
+ * A claim is "negligible" (not worth gas yet) when both unclaimed amounts are below these
+ * thresholds. A claim on Robinhood Chain costs ~100k-210k gas (docs/dry-run.md), so a
+ * Gen-6 pup's 0.01 RF a week is never worth a transaction of its own.
+ */
+export const NEGLIGIBLE_CLAIM_RF = 0.5;
+export const NEGLIGIBLE_CLAIM_WETH = 0.00005;
 
 function approveTx(costWei: bigint): PreparedTx {
   return {
@@ -59,6 +68,13 @@ function rationaleFor(kind: StewardActionKind, weeks: number | null, gainRf: num
   if (weeks <= 12) return `${base}: cheap for what it adds (${gainRf.toFixed(1)} RF a week).`;
   if (weeks <= 52) return `${base}: a long-horizon bet that only works if the stream holds.`;
   return `${base}: this is a collector's spend, not a yield play.`;
+}
+
+/** RF paid so far in tier upgrades of a Generations Friend (tiers 0..tier-1), lost on promote. */
+export function upgradesPaidRf(gen: number, tier: number): number {
+  let total = 0;
+  for (let t = 0; t < tier; t++) total += upgradeCostRf("Generations", gen, t);
+  return total;
 }
 
 interface PaidActionInput {
@@ -122,6 +138,8 @@ function claimAction(friend: Friend): StewardAction | null {
     parts.push(`${weiToRf(friend.rewards.earnedWeth).toFixed(6)} WETH`);
   }
   if (txs.length === 0) return null;
+  const unclaimedRf = weiToRf(friend.rewards.earnedRf);
+  const negligible = unclaimedRf < NEGLIGIBLE_CLAIM_RF && weiToRf(friend.rewards.earnedWeth) < NEGLIGIBLE_CLAIM_WETH;
   return {
     kind: "claim",
     friend,
@@ -133,7 +151,42 @@ function claimAction(friend: Friend): StewardAction | null {
     weeklyRfGain: 0,
     breakEvenWeeks: null,
     txs,
-    rationale: `Free: moves ${parts.join(" and ")} of unclaimed rewards into the Friend's own wallet (gas only).`,
+    rationale: negligible
+      ? `Not worth gas yet: ${unclaimedRf.toFixed(4)} RF unclaimed.`
+      : `Free: moves ${parts.join(" and ")} of unclaimed rewards into the Friend's own wallet (gas only).`,
+    negligible,
+  };
+}
+
+/**
+ * Withdraw: the owner moves the RF sitting in the Friend's ERC-6551 wallet back to their own
+ * address. One transaction on the account itself: execute(RF, 0, transfer(owner, amount), CALL).
+ * Only the NFT's owner may call execute; nothing is burned or spent.
+ */
+function withdrawAction(friend: Friend, owner: Address): StewardAction | null {
+  const amount = friend.savings.rf;
+  if (amount <= 0n) return null;
+  const amountRf = weiToRf(amount);
+  const transfer = encodeFunctionData({ abi: ERC20_ABI, functionName: "transfer", args: [owner, amount] });
+  return {
+    kind: "withdraw",
+    friend,
+    label: `Withdraw ${amountRf.toLocaleString("en-US", { maximumFractionDigits: 2 })} RF from #${friend.tokenId}'s wallet`,
+    costRf: 0,
+    burnRf: 0,
+    toRewardsRf: 0,
+    deltaWeight: 0,
+    weeklyRfGain: 0,
+    breakEvenWeeks: null,
+    txs: [
+      {
+        to: friend.wallet,
+        data: encodeFunctionData({ abi: ERC6551_ACCOUNT_ABI, functionName: "execute", args: [ADDRESSES.rf, 0n, transfer, 0] }),
+        value: 0n,
+        description: `execute(RF.transfer(owner, ${amountRf.toLocaleString("en-US", { maximumFractionDigits: 2 })} RF)) on the Friend's ERC-6551 wallet`,
+      },
+    ],
+    rationale: "Not a spend: takes the pet's RF savings back to your wallet.",
   };
 }
 
@@ -187,23 +240,26 @@ function friendActions(friend: Friend, household: Household, totalWeightRf: numb
     if (gen > 1) {
       // Protocol rule (docs "Promote"): the Friend resets to tier 0 of the new generation and
       // previous upgrade payments are not refunded. An inactive Friend gains no weight until woken.
-      out.push(
-        paidAction(
-          {
-            kind: "raise",
-            friend,
-            label: `Raise #${friend.tokenId} to Gen ${gen - 1}${tier > 0 ? ` (tier resets to 0)` : ""}`,
-            costWei: promoteCostWei(gen),
-            currentWeight,
-            newWeight: friend.position.active ? weightFor("Generations", gen - 1, 0) : currentWeight,
-            data: encodeFunctionData({ abi: ACTIVATION_MANAGER_ABI, functionName: "promote", args: [friend.tokenId] }),
-            description: `promote(#${friend.tokenId}) Gen ${gen} -> ${gen - 1}`,
-          },
-          household,
-          totalWeightRf,
-          streamRf,
-        ),
+      const raise = paidAction(
+        {
+          kind: "raise",
+          friend,
+          label: `Raise #${friend.tokenId} to Gen ${gen - 1}${tier > 0 ? ` (tier resets to 0)` : ""}`,
+          costWei: promoteCostWei(gen),
+          currentWeight,
+          newWeight: friend.position.active ? weightFor("Generations", gen - 1, 0) : currentWeight,
+          data: encodeFunctionData({ abi: ACTIVATION_MANAGER_ABI, functionName: "promote", args: [friend.tokenId] }),
+          description: `promote(#${friend.tokenId}) Gen ${gen} -> ${gen - 1}`,
+        },
+        household,
+        totalWeightRf,
+        streamRf,
       );
+      if (tier > 0) {
+        const paid = upgradesPaidRf(gen, tier);
+        raise.rationale = `${raise.rationale} Tier resets to 0; the ${paid.toLocaleString("en-US", { maximumFractionDigits: 4 })} RF you paid in upgrades is not refunded.`;
+      }
+      out.push(raise);
     }
   }
   return out;
@@ -268,8 +324,17 @@ function saveAction(household: Household, hatchGen: number): StewardAction | nul
   };
 }
 
+/** 0 claims worth gas, 1 paid actions and save (by break-even), 2 withdraws, 3 negligible claims. */
+function sortGroup(a: StewardAction): number {
+  if (a.kind === "claim") return a.negligible === true ? 3 : 0;
+  if (a.kind === "withdraw") return 2;
+  return 1;
+}
+
 function compareActions(a: StewardAction, b: StewardAction): number {
-  if (a.kind === "claim" !== (b.kind === "claim")) return a.kind === "claim" ? -1 : 1;
+  const ga = sortGroup(a);
+  const gb = sortGroup(b);
+  if (ga !== gb) return ga - gb;
   if (a.breakEvenWeeks === null || b.breakEvenWeeks === null) {
     if (a.breakEvenWeeks === b.breakEvenWeeks) return 0;
     return a.breakEvenWeeks === null ? 1 : -1;
@@ -277,7 +342,10 @@ function compareActions(a: StewardAction, b: StewardAction): number {
   return a.breakEvenWeeks - b.breakEvenWeeks;
 }
 
-/** Every action available to the household, claims first, then by break-even ascending (nulls last). */
+/**
+ * Every action available to the household: claims worth gas first, then paid actions by
+ * break-even ascending (nulls last, Save among them), then withdraws, then negligible claims.
+ */
 export function planHousehold(household: Household, state: ProtocolState, options: PlanOptions = {}): StewardAction[] {
   const totalWeightRf = weiToRf(state.totalWeight);
   const streamRf = weiToRf(state.rfStream.amount);
@@ -288,6 +356,8 @@ export function planHousehold(household: Household, state: ProtocolState, option
       if (claim !== null) actions.push(claim);
     }
     actions.push(...friendActions(friend, household, totalWeightRf, streamRf));
+    const withdraw = withdrawAction(friend, household.owner);
+    if (withdraw !== null) actions.push(withdraw);
   }
   const hatch = hatchAction(household, totalWeightRf, streamRf);
   if (hatch !== null) {

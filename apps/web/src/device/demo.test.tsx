@@ -8,9 +8,11 @@ export const lcdText = () => Array.from(screen.getByTestId("lcd-text").children,
 
 describe("demo action flow", () => {
   it("feeds Friend 1969 and shows a SIMULATED toast, mutating mock state", async () => {
-    const mock = createMockSource();
+    // Frozen clock: no demo-time accrual between the Feed and the assertions.
+    const mock = createMockSource({ now: () => Date.UTC(2026, 9, 1, 12) });
     const before = await mock.friend("Generations", 1969n);
-    expect(weiToRf(before.rewards.earnedRf)).toBeCloseTo(36189, 3);
+    const baked = mock.fixture.friends.find((f) => f.tokenId === 1969n)!;
+    expect(before.rewards.earnedRf).toBe(baked.rewards.earnedRf); // real unclaimed RF at bake time
     expect(weiToRf(before.position.weight)).toBe(416250);
 
     render(<Device source={mock} mode="demo" target={{ kind: "household", owner: DEMO_OWNER }} onSimulate={(action) => mock.simulate(action)} />);
@@ -30,7 +32,7 @@ describe("demo action flow", () => {
     const after = await mock.friend("Generations", 1969n);
     expect(after.rewards.earnedRf).toBe(0n);
     expect(after.rewards.earnedWeth).toBe(0n);
-    expect(weiToRf(after.savings.rf)).toBeCloseTo(12400 + 36189, 3);
+    expect(after.savings.rf).toBe(baked.savings.rf + baked.rewards.earnedRf);
   });
 
   it("keyboard arrows and Enter drive the machine; visitor mode never triggers actions", async () => {
@@ -53,19 +55,21 @@ describe("demo action flow", () => {
 
   it("hatching in the demo adds a pup of the generation the balance selects and moves the egg id", async () => {
     const mock = createMockSource();
+    const egg = mock.fixture.eggTokenId!; // the household's real egg; its real 110.63 RF balance selects Gen-4 (100 RF)
     render(<Device source={mock} mode="demo" target={{ kind: "household", owner: DEMO_OWNER }} onSimulate={(action) => mock.simulate(action)} initialScreen="HOUSEHOLD" />);
-    await waitFor(() => expect(lcdText().some((l) => l.includes("EGG #700001"))).toBe(true));
-    expect(lcdText().some((l) => l.includes("EGG #700001") && l.includes("G1 100K RF"))).toBe(true);
+    await waitFor(() => expect(lcdText().some((l) => l.includes(`EGG #${egg}`))).toBe(true));
+    expect(lcdText().some((l) => l.includes(`EGG #${egg}`) && l.includes("G4 100 RF"))).toBe(true);
     const ok = screen.getByRole("button", { name: "OK" });
     fireEvent.click(ok); // focus the list
     for (let i = 0; i < 4; i++) fireEvent.keyDown(window, { key: "ArrowRight" }); // 4 Friends, then the egg
     fireEvent.click(ok); // egg row -> CONFIRM hatch
-    expect(lcdText()).toContain("COST 100,000 RF");
+    expect(lcdText()).toContain("COST 100 RF");
+    fireEvent.keyDown(window, { key: "ArrowRight" }); // a paid CONFIRM defaults to NO: move to YES
     fireEvent.click(ok); // YES
-    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/^SIMULATED: Hatched #700001 as a Gen-1 pup/));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(new RegExp(`^SIMULATED: Hatched #${egg} as a Gen-4 pup`)));
     const h = await mock.household(DEMO_OWNER);
-    expect(h.friends.map((f) => f.tokenId)).toContain(700001n);
-    expect(h.eggTokenId).toBe(700002n);
-    expect(weiToRf(h.rfBalance)).toBe(150000);
+    expect(h.friends.map((f) => f.tokenId)).toContain(egg);
+    expect(h.eggTokenId).toBe(egg + 1n);
+    expect(h.rfBalance).toBe(mock.fixture.rfBalance - 100n * 10n ** 18n);
   });
 });
