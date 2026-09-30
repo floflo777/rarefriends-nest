@@ -7,3 +7,6 @@ coverage/
 .env.*
 !.env.example
 apps/web/public/data/*.tmp
+
+# indexer working cache (regenerable with `npm run index -w @nest/indexer`)
+tools/indexer/cache/
