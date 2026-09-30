@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-09-30T12:15:37.408Z",
-  "startedAt": "2026-09-30T11:34:43.797Z",
-  "durationMs": 2453611,
-  "status": "done",
+  "generatedAt": "2026-09-30T12:45:46.989Z",
+  "startedAt": "2026-09-30T12:45:42.603Z",
+  "durationMs": 4386,
+  "status": "running",
   "coverage": {
     "fromBlock": 0,
     "toBlock": 76481919,
@@ -10,31 +10,41 @@
     "partial": false
   },
   "run": {
-    "mode": "backfill",
-    "fromBlock": 0,
-    "toBlock": 73481919,
-    "head": 76483358,
-    "windowsFlushed": 32,
-    "newBurnRecords": 74810,
-    "newForeignBurns": 65,
+    "mode": "reresolve",
+    "fromBlock": 1,
+    "toBlock": 0,
+    "head": 76525652,
+    "windowsFlushed": 0,
+    "newBurnRecords": 0,
+    "newForeignBurns": 0,
     "rpc": {
-      "requests": 2562,
-      "items": 50027,
-      "retries": 159,
-      "rateLimited": 159,
+      "requests": 12,
+      "items": 12,
+      "retries": 0,
+      "rateLimited": 0,
       "paceFactor": 1
     }
   },
   "reconciliation": {
-    "rfTotalSupplyWei": "947734549066837858865375706",
-    "rfTotalSupplyRf": 947734549.0668379,
+    "rfTotalSupplyWei": "947731223066837858865375706",
+    "rfTotalSupplyRf": 947731223.0668379,
     "initialSupplyRf": 1024000000,
-    "impliedBurnedRf": 76265450.9331621,
+    "impliedBurnedRf": 76268776.9331621,
     "indexedBurnedRf": 76265332.39375,
     "foreignBurnedRf": 118.539412,
     "indexedPlusForeignRf": 76265450.933162,
-    "gapRf": 118.53941209614277,
-    "gapPct": 0.00015543002846731864
+    "gapRf": 3444.5394120961428,
+    "gapPct": 0.004516316572264892
+  },
+  "classification": {
+    "unresolvedRecords": 80706,
+    "receiptChecked": 0,
+    "stillUnknown": 25206,
+    "unknownSelectors": {},
+    "viaNest": {
+      "burnEvents": 0,
+      "burnedRf": 0
+    }
   },
   "foreignBurns": {
     "count": 65,
@@ -59,7 +69,7 @@
     }
   },
   "genesis": {
-    "blockNumber": 76483358,
+    "blockNumber": 76525652,
     "unreadable": 0,
     "inactiveByOwner": {
       "0xA850B2499c064900EfF341745807e1cB0d71a52b": 411,
@@ -168,7 +178,7 @@
   },
   "hardwired": {
     "fromBlock": 64590957,
-    "toBlock": 76483358
+    "toBlock": 76525652
   },
   "cache": {
     "burns": "/home/hyperliquid/projects/rarefriends-nest/tools/indexer/cache/burns.jsonl",

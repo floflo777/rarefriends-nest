@@ -20,7 +20,7 @@ function phaseText(phase: DemoPhase): string {
  */
 export function DemoPage() {
   const live = useMemo(() => createLiveSource(createNestClient()), []);
-  const mock = useMemo(() => createMockSource({ snapshot: () => live.snapshot() }), [live]);
+  const mock = useMemo(() => createMockSource({ snapshot: () => live.snapshot(), scene: (f) => live.scene(f) }), [live]);
   const [phase, setPhase] = useState<DemoPhase | null>(null);
   const onSimulate = useCallback(
     (action: StewardAction) => runDemo(action, { client: live.client, owner: DEMO_OWNER, simulate: (a) => mock.simulate(a), onPhase: setPhase }).then((r) => r.line),

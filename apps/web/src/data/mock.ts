@@ -22,6 +22,7 @@ import {
   FRAME_COUNT,
   activateCostWei,
   asciiToFrame,
+  createNestClient,
   decodeFrames,
   decodePortrait8,
   frameToRows,
@@ -44,7 +45,8 @@ import {
 } from "@nest/core";
 import demoJson from "./fixtures/demo.json";
 import type { DemoFixture, FixtureFriend, FixtureProtocol } from "./fixtures/schema.js";
-import { portraitToFrame, stillSprite } from "./live.js";
+import type { TokenScene } from "../model/scene.js";
+import { createLiveSource, portraitToFrame, stillSprite } from "./live.js";
 import { SourceError, friendKey, type NestDataSource } from "./source.js";
 
 /** Friend 1969 (Generations, family Asymmetry), frame 0 of its 64 on-chain frames (LCD tests). */
@@ -217,6 +219,8 @@ export function loadFixture(fixture: DemoFixture = DEMO_FIXTURE): LoadedFixture 
 export interface MockOptions {
   /** The real indexer snapshot (live.ts `snapshot()`), tried before the fixture's copy. */
   snapshot?: () => Promise<Snapshot>;
+  /** The Friend's real on-chain scene (live.ts `scene()`). Default: a live source on its own client, created on first use. */
+  scene?: (friend: Friend) => Promise<TokenScene>;
   /** Clock in milliseconds (tests). Default Date.now. */
   now?: () => number;
   /** Accrual acceleration. Default DEMO_TIME_SCALE. */
@@ -269,6 +273,7 @@ export function createMockSource(options: MockOptions = {}): MockSource {
   let lastActionAt = 0;
   let baseSnapshot: Promise<Snapshot> | null = null;
   const hatchedSprites = new Map<string, Sprite>();
+  let readScene = options.scene;
 
   const init = (): void => {
     sessionStart = nowS();
@@ -497,6 +502,21 @@ export function createMockSource(options: MockOptions = {}): MockSource {
       const sprite = fixture.sprites.get(key) ?? hatchedSprites.get(key);
       if (!sprite) throw new SourceError("not-found", `${friend.collection} #${friend.tokenId} has no sprite in the demo`);
       return sprite;
+    },
+    /**
+     * HOME shows the Friend's real `tokenURI` scene: a read-only call, free and truthful even in
+     * the demo. It is the scene as minted, so a simulated Raise does not redraw it; a pup hatched
+     * here has none yet.
+     */
+    async scene(friend): Promise<TokenScene> {
+      const key = friendKey(friend.collection, friend.tokenId);
+      if (!pets.has(key)) throw new SourceError("not-found", `${friend.collection} #${friend.tokenId} is not in the demo household`);
+      if (hatchedSprites.has(key)) throw new SourceError("not-found", `#${friend.tokenId} was hatched in this demo: no on-chain scene yet`);
+      if (!readScene) {
+        const live = createLiveSource(createNestClient());
+        readScene = (f) => live.scene(f);
+      }
+      return readScene(friend);
     },
     simulate(action) {
       let line = "";

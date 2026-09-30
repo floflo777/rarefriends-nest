@@ -21,6 +21,7 @@ import {
   readFriend,
   readHousehold,
   readProtocolState,
+  readTokenMetadata,
   rowsToFrame,
   type Collection,
   type Friend,
@@ -32,7 +33,7 @@ import {
   type Snapshot,
   type Sprite,
 } from "@nest/core";
-import { cachedScene, readTokenMetadata, type TokenScene } from "../model/scene.js";
+import { cachedScene, type TokenScene } from "../model/scene.js";
 import { maxHardwiredId } from "../model/snapshot.js";
 import { SourceError, friendKey, type NestDataSource } from "./source.js";
 
@@ -119,6 +120,8 @@ interface Registry {
 
 export interface LiveSource extends NestDataSource {
   readonly client: NestClient;
+  /** Always available live: the Friend's `tokenURI` scene through core. */
+  scene(friend: Friend): Promise<TokenScene>;
   /** Forget memoised reads for an owner (after a transaction lands). */
   invalidateHousehold(owner: Address): void;
 }

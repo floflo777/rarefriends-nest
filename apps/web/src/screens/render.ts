@@ -388,21 +388,23 @@ function renderLedger(p: Painter, m: ScreenModel): void {
     ["WETH/WK", pr ? compactWei(pr.wethStream.amount, 3) : "-"],
     ["WEIGHT", pr ? compactWei(pr.totalWeight) : "-"],
   ];
-  live.forEach(([label, value], i) => row(p, rowY(i), label, value));
+  live.forEach(([label, value], i) => row(p, tightY(i), label, value));
   if (s) {
+    const viaNest = s.totals.viaNest;
     const census: [string, string][] = [
+      ["VIA NEST", viaNest ? `${compact(Math.round(viaNest.burnedRf))} RF` : "0 RF"],
       ["HARDWIRED", grouped(s.hardwired.total)],
       ["WALLETS", grouped(s.hardwired.wallets)],
       ["GENESIS ON/OFF", `${grouped(s.genesis.activated)}/${grouped(s.genesis.inactive)}`],
     ];
-    census.forEach(([label, value], i) => row(p, rowY(4 + i), label, value));
+    census.forEach(([label, value], i) => row(p, tightY(4 + i), label, value));
     const c = coverageOf(s);
     row(p, FOOTER_Y, coverageSince(s), c === null ? "" : c.complete ? "FULL" : "PARTIAL");
   } else {
     fillRect(p.lcd, 0, rowY(4) - 2, LCD_W, 1);
     message(p, m.status.snapshot ? ["SNAPSHOT", "NOT BUILT YET"] : ["LOADING SNAPSHOT..."], rowY(5));
   }
-  if (!pr && m.status.protocol) row(p, rowY(0), "BURNED", "NO SIGNAL");
+  if (!pr && m.status.protocol) row(p, tightY(0), "BURNED", "NO SIGNAL");
 }
 
 /** "ERC20InsufficientAllowance(0xd4a3..., 0, 1125e20)" -> readable rows: name split on word boundaries, short args. */

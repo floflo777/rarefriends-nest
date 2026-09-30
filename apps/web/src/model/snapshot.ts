@@ -1,22 +1,15 @@
 /**
  * What the screens read from the indexer snapshot beyond the leaderboard: index coverage
  * (which blocks the burn attribution actually covers), the unknown-selector share and the
- * highest hardwired id. Fields core does not type yet are read through small adapters.
+ * highest hardwired id. Both optional blocks are absent in snapshots written by older indexers.
  */
 import type { Snapshot } from "@nest/core";
 
-export interface SnapshotCoverage {
-  fromBlock: number;
-  toBlock: number;
-  complete: boolean;
-  partial: boolean;
-}
+export type SnapshotCoverage = NonNullable<Snapshot["coverage"]>;
 
-// TODO(core): use `Snapshot["coverage"]` once core types the indexer's coverage block.
+/** The indexer's coverage block, or null when the snapshot was written without one. */
 export function coverageOf(snapshot: Snapshot): SnapshotCoverage | null {
-  const c = (snapshot as { coverage?: Partial<SnapshotCoverage> }).coverage;
-  if (!c || typeof c.fromBlock !== "number" || typeof c.toBlock !== "number") return null;
-  return { fromBlock: c.fromBlock, toBlock: c.toBlock, complete: c.complete === true, partial: c.partial === true || c.complete !== true };
+  return snapshot.coverage ?? null;
 }
 
 /** Block number as the LCD prints it: 64,981,920 -> "65.0M" (one decimal kept on purpose). */
@@ -56,15 +49,7 @@ export function unknownBurnShare(snapshot: Snapshot): number | null {
  * Highest Generations id the census has seen hardwired, or null when the snapshot does
  * not carry it. Any id above it with generation 0 has never been minted: NO SUCH FRIEND.
  */
-// TODO(core): read `snapshot.hardwired.maxTokenId` directly once the indexer/core type it.
 export function maxHardwiredId(snapshot: Snapshot): bigint | null {
-  const h = snapshot.hardwired as { maxTokenId?: number | string; maxId?: number | string; lastTokenId?: number | string };
-  const raw = h.maxTokenId ?? h.maxId ?? h.lastTokenId;
-  if (raw === undefined || raw === null) return null;
-  try {
-    const v = BigInt(typeof raw === "number" ? Math.floor(raw) : raw);
-    return v > 0n ? v : null;
-  } catch {
-    return null;
-  }
+  const max = snapshot.hardwired.maxTokenId;
+  return max !== undefined && Number.isInteger(max) && max > 0 ? BigInt(max) : null;
 }

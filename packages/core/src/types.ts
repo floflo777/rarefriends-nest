@@ -154,14 +154,31 @@ export interface HouseholdRank {
   burnedRf: number;
   actions: number;
   lastActionAt: number;
+  /** RF burned through transactions carrying the Nest calldata tag 0x4e4553540001; absent in older snapshots. */
+  viaNestRf?: number;
 }
 
 export interface Snapshot {
   blockNumber: number;
   timestamp: number;
-  totals: { burnedRf: number; burnEvents: number; byAction: Record<string, { count: number; burnedRf: number }> };
+  totals: {
+    burnedRf: number;
+    burnEvents: number;
+    byAction: Record<string, { count: number; burnedRf: number }>;
+    /** Burns whose transaction calldata ends with the Nest tag 0x4e4553540001; absent in older snapshots. */
+    viaNest?: { burnEvents: number; burnedRf: number };
+  };
   daily: { day: string; burnedRf: number; events: number }[];
   leaderboard: HouseholdRank[];
-  hardwired: { total: number; byGeneration: Record<string, number>; wallets: number; firstBlock: number };
+  hardwired: {
+    total: number;
+    byGeneration: Record<string, number>;
+    wallets: number;
+    firstBlock: number;
+    /** Highest Generations id seen hardwired (any higher id was never minted); absent in older snapshots. */
+    maxTokenId?: number;
+  };
   genesis: { activated: number; inactive: number; reserveHeld: number };
+  /** Block range the burn attribution actually covers (indexer); absent in snapshots written before it existed. */
+  coverage?: { fromBlock: number; toBlock: number; complete: boolean; partial: boolean };
 }

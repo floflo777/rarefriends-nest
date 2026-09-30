@@ -1,11 +1,11 @@
 /** Everything the screens derive from a Friend at an instant, all through core. */
 import {
   animationFor,
+  careEventsFromBurns,
   computeVitals,
   describe,
   moodState,
   speechLine,
-  DAY_SECONDS,
   type Animation,
   type CareEvent,
   type Friend,
@@ -61,22 +61,15 @@ export const MOOD_ICON: Readonly<Record<MoodState, IconName>> = {
 };
 
 export interface PetIdentity {
-  /** Header name: the registry-derived name for Generations, "#id" for Genesis. */
+  /** Header name: core's registry-derived name (Generations) or Genesis name. */
   name: string;
   /** Upper-case family label: the registry family, or GENESIS (Genesis has no family). */
   familyLabel: string;
 }
 
-/**
- * Genesis Friends have no Generations family: the CLI prints "family —" and no name, so
- * does the LCD. Core's `describe` is used as soon as it recognises Genesis itself.
- */
-// TODO(core): rely on core's Genesis personality (describe -> family "Genesis") once it lands.
+/** Core's `describe` recognises Genesis itself: its family is "Genesis", never a registry family. */
 export function identityOf(friend: Friend): PetIdentity {
   const p = describe(friend);
-  if (friend.collection === "Genesis") {
-    return { name: p.family === "Genesis" ? p.name : `#${friend.tokenId}`, familyLabel: "GENESIS" };
-  }
   return { name: p.name, familyLabel: (friend.familyName ?? p.family).toUpperCase() };
 }
 
@@ -114,17 +107,12 @@ export function rememberSavings(key: string, value: number): void {
 
 /**
  * Care events for the pet's owner: this session's own promotes/upgrades plus, from the
- * snapshot leaderboard, the household's last indexed action when it is under a day old.
+ * snapshot leaderboard, the household's last indexed action. The leaderboard does not say
+ * which function it was, so a recent paid action reads as an upgrade; core's
+ * `careEventsFromBurns` applies its time window (nothing in the future, nothing older than a week).
  */
-// TODO(core): use `careEventsFromBurns(records, owner)` for typed per-action events once exported.
 export function recentCareEvents(owner: string | undefined, snapshot: Snapshot | null, now: number, local: readonly CareEvent[]): CareEvent[] {
-  const events = [...local];
-  if (owner && snapshot) {
-    const rank = snapshot.leaderboard.find((r) => r.owner.toLowerCase() === owner.toLowerCase());
-    if (rank && rank.lastActionAt > 0 && now - rank.lastActionAt <= DAY_SECONDS && rank.lastActionAt <= now) {
-      // The leaderboard does not say which function it was: a recent paid action reads as an upgrade.
-      events.push({ action: "upgrade", at: rank.lastActionAt });
-    }
-  }
-  return events;
+  const rank = owner && snapshot ? snapshot.leaderboard.find((r) => r.owner.toLowerCase() === owner.toLowerCase()) : undefined;
+  const indexed = rank && rank.lastActionAt > 0 ? careEventsFromBurns([{ timestamp: rank.lastActionAt, action: "upgrade" }], now) : [];
+  return [...local, ...indexed];
 }
