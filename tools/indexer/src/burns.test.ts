@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Hex } from "viem";
-import { burnKey, classifySelector, mergeBurns, type IndexedBurn } from "./burns.js";
+import { burnKey, classifyByReceipt, classifySelector, isViaNest, mergeBurns, selectorOf, type IndexedBurn } from "./burns.js";
+import { ACTIVATION_MANAGER_TOPICS } from "./events.js";
 
 const A = "0x2287e0B2F6757F1502F17dFa83b0388Be9ce52Ff" as const;
 
@@ -13,9 +14,47 @@ function rec(n: number, logIndex = 0, extra: Partial<IndexedBurn> = {}): Indexed
     from: A,
     action: "hardwire",
     burnedRf: 10n ** 18n,
+    selector: "0x9f68c98a",
+    viaNest: false,
+    receiptChecked: false,
     ...extra,
   };
 }
+
+const AM = "0xd4a35e11318e3679168d409184b788bcf9f283ac" as const;
+const OTHER = "0x0779369854d3EcdEA927206718FFD7730C67B71f" as const;
+
+describe("selectorOf / isViaNest", () => {
+  it("extracts a lower-cased selector or 0x", () => {
+    expect(selectorOf("0x9F68C98A00")).toBe("0x9f68c98a");
+    expect(selectorOf("0x9f68c9")).toBe("0x");
+    expect(selectorOf(undefined)).toBe("0x");
+  });
+  it("detects the Nest tag at the end of the calldata, case-insensitively", () => {
+    expect(isViaNest("0x9f68c98a00000000000000000000000000000000000000000000000000000000000000064e4553540001")).toBe(true);
+    expect(isViaNest("0x9f68c98a00000000000000000000000000000000000000000000000000000000000000064E4553540001")).toBe(true);
+    expect(isViaNest("0x9f68c98a0000000000000000000000000000000000000000000000000000000000000006")).toBe(false);
+    expect(isViaNest("0x4e4553540001")).toBe(false); // tag alone, no selector
+    expect(isViaNest(undefined)).toBe(false);
+  });
+});
+
+describe("classifyByReceipt", () => {
+  const log = (address: `0x${string}`, topic: `0x${string}`) => ({ address, topics: [topic] as `0x${string}`[] });
+  it("hardwire when a Hardwired event is emitted by ActivationManager", () => {
+    expect(classifyByReceipt([log(AM, ACTIVATION_MANAGER_TOPICS.Claimed), log(AM, ACTIVATION_MANAGER_TOPICS.Hardwired)])).toBe("hardwire");
+    expect(classifyByReceipt([log(AM, ACTIVATION_MANAGER_TOPICS.Hardwired.toUpperCase().replace("0X", "0x") as `0x${string}`)])).toBe("hardwire");
+  });
+  it("promote on Promoted, hardwire wins over promote", () => {
+    expect(classifyByReceipt([log(AM, ACTIVATION_MANAGER_TOPICS.Promoted)])).toBe("promote");
+    expect(classifyByReceipt([log(AM, ACTIVATION_MANAGER_TOPICS.Promoted), log(AM, ACTIVATION_MANAGER_TOPICS.Hardwired)])).toBe("hardwire");
+  });
+  it("ignores events from other contracts and stays unknown otherwise", () => {
+    expect(classifyByReceipt([log(OTHER, ACTIVATION_MANAGER_TOPICS.Hardwired)])).toBe("unknown");
+    expect(classifyByReceipt([log(AM, ACTIVATION_MANAGER_TOPICS.Claimed), log(AM, ACTIVATION_MANAGER_TOPICS.Funded)])).toBe("unknown");
+    expect(classifyByReceipt([])).toBe("unknown");
+  });
+});
 
 describe("classifySelector", () => {
   it("maps known selectors, case-insensitively, ignoring trailing calldata", () => {

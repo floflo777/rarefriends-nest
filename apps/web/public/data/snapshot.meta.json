@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-09-30T13:09:48.148Z",
+  "generatedAt": "2026-09-30T13:26:09.970Z",
   "startedAt": "2026-09-30T12:45:42.603Z",
-  "durationMs": 1445545,
+  "durationMs": 2427367,
   "status": "running",
   "coverage": {
     "fromBlock": 0,
@@ -18,11 +18,11 @@
     "newBurnRecords": 0,
     "newForeignBurns": 0,
     "rpc": {
-      "requests": 1534,
-      "items": 30452,
-      "retries": 72,
-      "rateLimited": 72,
-      "paceFactor": 1.723435676082353
+      "requests": 2551,
+      "items": 50781,
+      "retries": 137,
+      "rateLimited": 137,
+      "paceFactor": 1.8883386230143255
     }
   },
   "reconciliation": {
@@ -37,18 +37,43 @@
     "gapPct": 0.004516316572264892
   },
   "classification": {
-    "unresolvedRecords": 43155,
+    "unresolvedRecords": 0,
     "receiptChecked": 0,
     "stillUnknown": 25206,
     "unknownSelectors": {
       "0x1fad948c": {
-        "count": 113,
-        "burnedRf": 331993.4375,
+        "count": 244,
+        "burnedRf": 583966.275,
+        "action": "unknown"
+      },
+      "0x85e3c463": {
+        "count": 14191,
+        "burnedRf": 163970,
+        "action": "unknown"
+      },
+      "0xf204bdb9": {
+        "count": 10,
+        "burnedRf": 5998.5,
+        "action": "unknown"
+      },
+      "0xe4959c50": {
+        "count": 5450,
+        "burnedRf": 2725,
+        "action": "unknown"
+      },
+      "0xc53122d5": {
+        "count": 4500,
+        "burnedRf": 2250,
         "action": "unknown"
       },
       "0x60808060": {
         "count": 478,
         "burnedRf": 239,
+        "action": "unknown"
+      },
+      "0xe08e3f41": {
+        "count": 333,
+        "burnedRf": 166.5,
         "action": "unknown"
       }
     },

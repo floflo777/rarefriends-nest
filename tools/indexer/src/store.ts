@@ -15,6 +15,10 @@ interface BurnLine {
   from: Address;
   action: IndexedBurn["action"];
   burnedRf: string;
+  /** Absent on lines written before selectors were stored: the record is then unresolved (selector null). */
+  selector?: Hex;
+  viaNest?: boolean;
+  receiptChecked?: boolean;
 }
 
 export function serializeBurn(r: IndexedBurn): string {
@@ -26,6 +30,9 @@ export function serializeBurn(r: IndexedBurn): string {
     from: r.from,
     action: r.action,
     burnedRf: r.burnedRf.toString(),
+    ...(r.selector === null ? {} : { selector: r.selector }),
+    viaNest: r.viaNest,
+    receiptChecked: r.receiptChecked,
   };
   return JSON.stringify(line);
 }
@@ -40,6 +47,9 @@ export function parseBurn(line: string): IndexedBurn {
     from: o.from,
     action: o.action,
     burnedRf: BigInt(o.burnedRf),
+    selector: o.selector ?? null,
+    viaNest: o.viaNest ?? false,
+    receiptChecked: o.receiptChecked ?? false,
   };
 }
 

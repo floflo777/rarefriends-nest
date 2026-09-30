@@ -27,10 +27,15 @@ export interface HardwiredState {
   byGeneration: Record<string, number>;
   /** Lower-cased distinct holders. */
   wallets: string[];
+  /** Highest tokenId seen in a Hardwired event, null when no event yet. */
+  maxTokenId: number | null;
 }
 
+/** Snapshot section: the core shape plus the highest hardwired tokenId. */
+export type HardwiredSnapshot = Snapshot["hardwired"] & { maxTokenId: number };
+
 export function emptyHardwiredState(fromBlock: bigint): HardwiredState {
-  return { fromBlock: Number(fromBlock), toBlock: Number(fromBlock) - 1, firstBlock: null, total: 0, byGeneration: {}, wallets: [] };
+  return { fromBlock: Number(fromBlock), toBlock: Number(fromBlock) - 1, firstBlock: null, total: 0, byGeneration: {}, wallets: [], maxTokenId: null };
 }
 
 /** Pure: fold events into a state covering up to `toBlock`. */
@@ -38,12 +43,15 @@ export function applyHardwiredEvents(state: HardwiredState, events: readonly Har
   const byGeneration = { ...state.byGeneration };
   const wallets = new Set(state.wallets);
   let firstBlock = state.firstBlock;
+  let maxTokenId = state.maxTokenId;
   for (const e of events) {
     const g = String(e.generation);
     byGeneration[g] = (byGeneration[g] ?? 0) + 1;
     wallets.add(e.holder.toLowerCase());
     const b = Number(e.blockNumber);
     if (firstBlock === null || b < firstBlock) firstBlock = b;
+    const id = Number(e.tokenId);
+    if (maxTokenId === null || id > maxTokenId) maxTokenId = id;
   }
   return {
     fromBlock: state.fromBlock,
@@ -52,13 +60,21 @@ export function applyHardwiredEvents(state: HardwiredState, events: readonly Har
     total: state.total + events.length,
     byGeneration,
     wallets: [...wallets].sort(),
+    maxTokenId,
   };
 }
 
-export function toSnapshotHardwired(state: HardwiredState): Snapshot["hardwired"] {
+/** A cached state written by an older version (no maxTokenId) must be rebuilt. */
+export function isCurrentHardwiredState(state: unknown): state is HardwiredState {
+  if (typeof state !== "object" || state === null) return false;
+  const s = state as Partial<HardwiredState>;
+  return (s.maxTokenId === null || typeof s.maxTokenId === "number") && Array.isArray(s.wallets);
+}
+
+export function toSnapshotHardwired(state: HardwiredState): HardwiredSnapshot {
   const byGeneration: Record<string, number> = {};
   for (const g of Object.keys(state.byGeneration).sort((a, b) => Number(a) - Number(b))) byGeneration[g] = state.byGeneration[g] ?? 0;
-  return { total: state.total, byGeneration, wallets: state.wallets.length, firstBlock: state.firstBlock ?? 0 };
+  return { total: state.total, byGeneration, wallets: state.wallets.length, firstBlock: state.firstBlock ?? 0, maxTokenId: state.maxTokenId ?? 0 };
 }
 
 const HARDWIRED_EVENT = getAbiItem({ abi: ACTIVATION_MANAGER_ABI, name: "Hardwired" });

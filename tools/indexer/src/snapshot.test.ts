@@ -20,6 +20,9 @@ function rec(from: `0x${string}`, rf: number, timestamp: number, action: Indexed
     from,
     action,
     burnedRf: BigInt(Math.round(rf * 1e6)) * 10n ** 12n,
+    selector: "0x9f68c98a",
+    viaNest: false,
+    receiptChecked: false,
   };
 }
 
@@ -68,9 +71,9 @@ describe("buildLeaderboard", () => {
     ];
     const lb = buildLeaderboard(records);
     expect(lb.map((h) => h.owner)).toEqual([B, A_CHECKSUM, "0x0000000000000000000000000000000000000003"]);
-    expect(lb[0]).toEqual({ owner: B, burnedRf: 100, actions: 1, lastActionAt: D2 });
-    expect(lb[1]).toEqual({ owner: A_CHECKSUM, burnedRf: 5.5, actions: 2, lastActionAt: D3 });
-    expect(lb[2]).toEqual({ owner: "0x0000000000000000000000000000000000000003", burnedRf: 2, actions: 1, lastActionAt: D2 });
+    expect(lb[0]).toEqual({ owner: B, burnedRf: 100, actions: 1, lastActionAt: D2, viaNestRf: 0 });
+    expect(lb[1]).toEqual({ owner: A_CHECKSUM, burnedRf: 5.5, actions: 2, lastActionAt: D3, viaNestRf: 0 });
+    expect(lb[2]).toEqual({ owner: "0x0000000000000000000000000000000000000003", burnedRf: 2, actions: 1, lastActionAt: D2, viaNestRf: 0 });
   });
   it("merges case variants of the same address", () => {
     const lb = buildLeaderboard([rec(A, 1, D1), rec(A_CHECKSUM as `0x${string}`, 1, D2)]);
@@ -84,23 +87,37 @@ describe("buildLeaderboard", () => {
 });
 
 describe("buildTotals / buildSnapshot", () => {
-  it("totals by action ordered by RF burned", () => {
+  it("totals by action ordered by RF burned, viaNest present even when zero", () => {
     const totals = buildTotals([rec(A, 1, D1), rec(A, 1, D1), rec(B, 50, D1, "upgrade"), rec(C, 3, D1, "unknown")]);
     expect(totals.burnEvents).toBe(4);
     expect(totals.burnedRf).toBe(55);
     expect(Object.keys(totals.byAction)).toEqual(["upgrade", "unknown", "hardwire"]);
     expect(totals.byAction["hardwire"]).toEqual({ count: 2, burnedRf: 2 });
+    expect(totals.viaNest).toEqual({ burnEvents: 0, burnedRf: 0 });
+  });
+  it("sums Nest-tagged burns in totals and per household", () => {
+    const tagged = { ...rec(A, 4.5, D2, "promote"), viaNest: true };
+    const totals = buildTotals([rec(A, 1, D1), tagged, rec(B, 10, D1)]);
+    expect(totals.viaNest).toEqual({ burnEvents: 1, burnedRf: 4.5 });
+    const lb = buildLeaderboard([rec(A, 1, D1), tagged, rec(B, 10, D1)]);
+    expect(lb.map((h) => [h.owner, h.viaNestRf])).toEqual([
+      [B, 0],
+      [A_CHECKSUM, 4.5],
+    ]);
   });
   it("assembles a JSON-safe snapshot", () => {
     const snap = buildSnapshot({
       records: [rec(A, 1, D1)],
-      hardwired: { total: 1, byGeneration: { "6": 1 }, wallets: 1, firstBlock: 64_590_957 },
+      hardwired: { total: 1, byGeneration: { "6": 1 }, wallets: 1, firstBlock: 64_590_957, maxTokenId: 1025 },
       genesis: { activated: 10, inactive: 1014, reserveHeld: 1000 },
+      coverage: { fromBlock: 0, toBlock: 76_000_000, complete: true, partial: false },
       blockNumber: 76_000_000,
       timestamp: D3,
     });
     expect(snap.blockNumber).toBe(76_000_000);
     expect(snap.leaderboard[0]?.owner).toBe(A_CHECKSUM);
+    expect(snap.coverage.complete).toBe(true);
+    expect(snap.hardwired.maxTokenId).toBe(1025);
     expect(() => JSON.stringify(snap)).not.toThrow(); // no bigint left
     expect(JSON.parse(JSON.stringify(snap))).toEqual(snap);
   });

@@ -6,16 +6,24 @@
  *
  * Per distinct block one `eth_getBlockByNumber(block, true)` gives the timestamp and every transaction's
  * sender and calldata, which is cheaper on the rate limiter than one getTransaction per tx plus one
- * getBlock per block. Each getLogs window is fully resolved and handed to `onWindow` before the next one,
- * so callers can persist partial progress.
+ * getBlock per block. Transactions whose selector is not a known action are then classified from their
+ * receipt (Hardwired / Promoted events). Each getLogs window is fully resolved and handed to `onWindow`
+ * before the next one, so callers can persist partial progress.
  */
-import { getAbiItem, getAddress, TransactionNotFoundError, type Address, type Hex } from "viem";
+import { getAbiItem, getAddress, type Address, type Hex } from "viem";
 import { ACTION_SELECTORS, ADDRESSES, ERC20_ABI, type ActionName, type BurnRecord } from "@nest/core";
+import { ACTIVATION_MANAGER_TOPICS } from "./events.js";
 import type { Rpc } from "./rpc.js";
 
 /** One burn log. A transaction may hold several, hence `logIndex` in the merge key. */
 export interface IndexedBurn extends BurnRecord {
   logIndex: number;
+  /** First 4 bytes of the calldata ("0x" when shorter); null when the transaction was never resolved (older cache lines). */
+  selector: Hex | null;
+  /** Calldata ends with the Nest tag. */
+  viaNest: boolean;
+  /** The receipt was inspected because the selector was unknown. */
+  receiptChecked: boolean;
 }
 
 /** RF sent to 0x0 by something other than ActivationManager. */
@@ -46,14 +54,43 @@ export interface BurnIndexOptions {
   onWindow?: (window: BurnWindow) => Promise<void> | void;
 }
 
+/** Nest appends this 6-byte tag to the calldata of every transaction it prepares. */
+export const NEST_TAG = "4e4553540001";
+
 const TRANSFER_EVENT = getAbiItem({ abi: ERC20_ABI, name: "Transfer" });
 const ACTIVATION_MANAGER = ADDRESSES.activationManager.toLowerCase();
 
+/** First 4 bytes of calldata, lower-cased; "0x" when the input is shorter than a selector. */
+export function selectorOf(input: string | undefined | null): Hex {
+  if (!input || input.length < 10) return "0x";
+  return input.slice(0, 10).toLowerCase() as Hex;
+}
+
 /** Classify a transaction by the first 4 bytes of its calldata. */
 export function classifySelector(input: string | undefined | null): ActionName | "unknown" {
-  if (!input || input.length < 10) return "unknown";
-  const selector = input.slice(0, 10).toLowerCase();
+  const selector = selectorOf(input);
   return (ACTION_SELECTORS as Record<string, ActionName>)[selector] ?? "unknown";
+}
+
+/** True when the calldata ends with the Nest tag (and has a selector before it). */
+export function isViaNest(input: string | undefined | null): boolean {
+  if (!input || input.length < 10 + NEST_TAG.length) return false;
+  return input.toLowerCase().endsWith(NEST_TAG);
+}
+
+/**
+ * Classify a transaction from its receipt logs: a `Hardwired` event on ActivationManager means hardwire,
+ * else a `Promoted` event means promote. Upgrade and activate have no decoded event, they stay unknown.
+ */
+export function classifyByReceipt(logs: readonly { address: Address; topics: readonly Hex[] }[]): ActionName | "unknown" {
+  let result: ActionName | "unknown" = "unknown";
+  for (const l of logs) {
+    if (l.address.toLowerCase() !== ACTIVATION_MANAGER) continue;
+    const topic = l.topics[0]?.toLowerCase();
+    if (topic === ACTIVATION_MANAGER_TOPICS.Hardwired) return "hardwire";
+    if (topic === ACTIVATION_MANAGER_TOPICS.Promoted) result = "promote";
+  }
+  return result;
 }
 
 export function burnKey(r: { txHash: string; logIndex: number }): string {
@@ -70,64 +107,140 @@ interface RawBurnLog {
 
 interface TxInfo {
   from: Address;
+  selector: Hex;
   action: ActionName | "unknown";
+  viaNest: boolean;
 }
 
-/** Resolve sender, action and timestamp for the protocol burns of one window. */
-async function resolveWindow(rpc: Rpc, protocol: RawBurnLog[], log: (msg: string) => void): Promise<IndexedBurn[]> {
-  const txInfo = new Map<string, TxInfo>();
-  const timestamps = new Map<bigint, number>();
-  const blocks = [...new Set(protocol.map((r) => r.blockNumber))];
+interface BlockInfo {
+  txInfo: Map<string, TxInfo>;
+  timestamps: Map<bigint, number>;
+}
+
+/** Fetch the given blocks with their transactions: timestamps plus sender/calldata facts per tx hash. */
+async function fetchBlocks(rpc: Rpc, blocks: readonly bigint[], log: (msg: string) => void, label = "burns.getBlock"): Promise<BlockInfo> {
+  const info: BlockInfo = { txInfo: new Map(), timestamps: new Map() };
   await rpc.batch(
-    "burns.getBlock",
+    label,
     blocks,
     async (blockNumber) => {
       const block = await rpc.client.getBlock({ blockNumber, includeTransactions: true });
-      timestamps.set(blockNumber, Number(block.timestamp));
+      info.timestamps.set(blockNumber, Number(block.timestamp));
       for (const tx of block.transactions) {
         if (typeof tx === "string") continue;
-        txInfo.set(tx.hash.toLowerCase(), { from: getAddress(tx.from), action: classifySelector(tx.input) });
+        info.txInfo.set(tx.hash.toLowerCase(), { from: getAddress(tx.from), selector: selectorOf(tx.input), action: classifySelector(tx.input), viaNest: isViaNest(tx.input) });
       }
     },
     (done, total) => {
-      if (done % (rpc.batchSize * 25) === 0 || done === total) log(`burns: blocks ${done}/${total} (pace x${rpc.paceFactor.toFixed(2)})`);
+      if (done % (rpc.batchSize * 25) === 0 || done === total) log(`${label}: ${done}/${total} blocks (pace x${rpc.paceFactor.toFixed(2)})`);
     },
   );
+  return info;
+}
 
-  // Transactions missing from their block payload (should not happen): fetch them one by one.
-  const missing = [...new Set(protocol.map((r) => r.txHash).filter((h) => !txInfo.has(h.toLowerCase())))];
-  if (missing.length > 0) {
-    log(`burns: ${missing.length} transactions absent from block payloads, fetching individually`);
-    await rpc.batch("burns.getTransaction", missing, async (hash) => {
-      try {
-        const tx = await rpc.client.getTransaction({ hash });
-        txInfo.set(hash.toLowerCase(), { from: getAddress(tx.from), action: classifySelector(tx.input) });
-      } catch (err) {
-        if (!(err instanceof TransactionNotFoundError)) throw err;
-      }
-    });
+/** Apply block facts to burn records in place. Records whose transaction is missing keep their previous facts. */
+function applyBlockInfo(records: IndexedBurn[], info: BlockInfo, log: (msg: string) => void): void {
+  let missing = 0;
+  for (const r of records) {
+    const timestamp = info.timestamps.get(r.blockNumber);
+    if (timestamp !== undefined) r.timestamp = timestamp;
+    const tx = info.txInfo.get(r.txHash.toLowerCase());
+    if (tx === undefined) {
+      missing++;
+      continue;
+    }
+    r.from = tx.from;
+    r.selector = tx.selector;
+    r.action = tx.action;
+    r.viaNest = tx.viaNest;
+    r.receiptChecked = false;
   }
+  if (missing > 0) log(`burns: WARNING ${missing} burns whose transaction is absent from its block payload`);
+}
 
-  const records: IndexedBurn[] = [];
-  let unattributed = 0;
-  for (const r of protocol) {
-    const info = txInfo.get(r.txHash.toLowerCase());
-    if (info === undefined) unattributed++;
-    const timestamp = timestamps.get(r.blockNumber);
-    if (timestamp === undefined) throw new Error(`burns: no timestamp for block ${r.blockNumber}`);
-    records.push({
-      txHash: r.txHash,
-      blockNumber: r.blockNumber,
-      logIndex: r.logIndex,
-      timestamp,
-      from: info?.from ?? ADDRESSES.zero,
-      action: info?.action ?? "unknown",
-      burnedRf: r.value,
-    });
+/**
+ * Inspect the receipts of transactions whose selector is unknown and not yet checked; updates `action`
+ * and `receiptChecked` in place. Returns the number of records that got a real action.
+ */
+export async function classifyUnknownByReceipt(rpc: Rpc, records: IndexedBurn[], log: (msg: string) => void = () => {}): Promise<number> {
+  const pending = records.filter((r) => r.action === "unknown" && !r.receiptChecked);
+  if (pending.length === 0) return 0;
+  const hashes = [...new Set(pending.map((r) => r.txHash.toLowerCase() as Hex))];
+  log(`burns: inspecting ${hashes.length} receipts for ${pending.length} unknown burns`);
+  const byTx = new Map<string, ActionName | "unknown">();
+  await rpc.batch(
+    "burns.getTransactionReceipt",
+    hashes,
+    async (hash) => {
+      const receipt = await rpc.client.getTransactionReceipt({ hash });
+      byTx.set(hash, classifyByReceipt(receipt.logs));
+    },
+    (done, total) => {
+      if (done % (rpc.batchSize * 25) === 0 || done === total) log(`burns.getTransactionReceipt: ${done}/${total}`);
+    },
+  );
+  let reclassified = 0;
+  for (const r of pending) {
+    const action = byTx.get(r.txHash.toLowerCase());
+    if (action === undefined) continue;
+    r.receiptChecked = true;
+    if (action !== "unknown") {
+      r.action = action;
+      reclassified++;
+    }
   }
-  if (unattributed > 0) log(`burns: WARNING ${unattributed} burns attributed to 0x0/unknown (transaction not found)`);
+  log(`burns: ${reclassified} unknown burns reclassified from receipts, ${pending.length - reclassified} still unknown`);
+  return reclassified;
+}
+
+/** Resolve sender, selector, action, Nest tag and timestamp for the protocol burns of one window. */
+async function resolveWindow(rpc: Rpc, protocol: RawBurnLog[], log: (msg: string) => void): Promise<IndexedBurn[]> {
+  const records: IndexedBurn[] = protocol.map((r) => ({
+    txHash: r.txHash,
+    blockNumber: r.blockNumber,
+    logIndex: r.logIndex,
+    timestamp: 0,
+    from: ADDRESSES.zero,
+    action: "unknown",
+    burnedRf: r.value,
+    selector: null,
+    viaNest: false,
+    receiptChecked: false,
+  }));
+  const info = await fetchBlocks(rpc, [...new Set(protocol.map((r) => r.blockNumber))], log);
+  applyBlockInfo(records, info, log);
+  for (const r of records) if (r.timestamp === 0) throw new Error(`burns: no timestamp for block ${r.blockNumber}`);
+  await classifyUnknownByReceipt(rpc, records, log);
   records.sort(compareByPosition);
   return records;
+}
+
+export interface ReresolveOptions {
+  log?: (msg: string) => void;
+  /** Blocks per slice; `onSlice` runs after each so progress can be persisted. */
+  sliceBlocks?: number;
+  onSlice?: (doneBlocks: number, totalBlocks: number) => Promise<void> | void;
+}
+
+/**
+ * Re-fetch the blocks of records that were never resolved with the current facts (selector null) and
+ * update them in place, then classify the remaining unknowns from receipts.
+ */
+export async function reresolve(rpc: Rpc, records: IndexedBurn[], opts: ReresolveOptions = {}): Promise<number> {
+  const log = opts.log ?? (() => {});
+  const stale = records.filter((r) => r.selector === null);
+  const blocks = [...new Set(stale.map((r) => r.blockNumber))].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  log(`reresolve: ${stale.length} records in ${blocks.length} blocks`);
+  const slice = opts.sliceBlocks ?? 1_000;
+  for (let i = 0; i < blocks.length; i += slice) {
+    const part = blocks.slice(i, i + slice);
+    const set = new Set(part);
+    const info = await fetchBlocks(rpc, part, log, "reresolve.getBlock");
+    applyBlockInfo(stale.filter((r) => set.has(r.blockNumber)), info, log);
+    await opts.onSlice?.(Math.min(i + part.length, blocks.length), blocks.length);
+  }
+  await classifyUnknownByReceipt(rpc, records, log);
+  return stale.length;
 }
 
 export async function indexBurns(rpc: Rpc, fromBlock: bigint, toBlock: bigint, opts: BurnIndexOptions = {}): Promise<BurnIndexResult> {

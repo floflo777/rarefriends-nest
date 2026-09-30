@@ -1,5 +1,5 @@
 /**
- * CLI: tsx src/index.ts [--full] [--recent N] [--backfill] [--from N] [--to N] [--out DIR] [--cache DIR]
+ * CLI: tsx src/index.ts [--full] [--recent N] [--backfill] [--reresolve] [--from N] [--to N] [--out DIR] [--cache DIR]
  *
  * Builds apps/web/public/data/snapshot.json (+ snapshot.meta.json) from the public RPC, throttled.
  * The cache (tools/indexer/cache/) holds the raw burn records (burns.jsonl, foreign-burns.jsonl), the
@@ -13,17 +13,21 @@
  *                 does not touch that range
  *   --backfill    extend coverage backward from coveredFrom - 1 down to --from (default 0), newest first
  *   --full        discard the cache and index --from (default 0) .. --to (default head)
+ *   --reresolve   no scan: re-fetch the blocks of cached records written before selectors / the Nest tag
+ *                 were stored, then rebuild the snapshot
  *   --from/--to   explicit bounds; with neither mode flag, an explicit --from re-indexes from there
+ *
+ * Every run ends with a receipt pass over cached burns whose selector is unknown and unchecked.
  */
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { formatUnits } from "viem";
-import { ADDRESSES, ERC20_ABI, type Snapshot } from "@nest/core";
-import { indexBurns, mergeBurns, type BurnWindow, type ForeignBurn, type IndexedBurn } from "./burns.js";
+import { ACTION_SELECTORS, ADDRESSES, ERC20_ABI } from "@nest/core";
+import { classifyUnknownByReceipt, indexBurns, mergeBurns, reresolve, type BurnWindow, type ForeignBurn, type IndexedBurn } from "./burns.js";
 import { censusGenesis, type GenesisSummary } from "./genesis.js";
-import { applyHardwiredEvents, emptyHardwiredState, HARDWIRED_FIRST_BLOCK, indexHardwired, toSnapshotHardwired, type HardwiredState } from "./hardwired.js";
+import { applyHardwiredEvents, emptyHardwiredState, HARDWIRED_FIRST_BLOCK, indexHardwired, isCurrentHardwiredState, toSnapshotHardwired, type HardwiredState } from "./hardwired.js";
 import { Rpc } from "./rpc.js";
-import { buildSnapshot, INITIAL_RF_SUPPLY_RF, weiToRf } from "./snapshot.js";
+import { buildSnapshot, INITIAL_RF_SUPPLY_RF, weiToRf, type Coverage, type SnapshotFile } from "./snapshot.js";
 import { parseBurn, parseForeign, readJson, readJsonl, serializeBurn, serializeForeign, writeJson, writeJsonl } from "./store.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -31,7 +35,7 @@ const REPO_ROOT = resolve(HERE, "../../..");
 const DEFAULT_OUT_DIR = resolve(REPO_ROOT, "apps/web/public/data");
 const DEFAULT_CACHE_DIR = resolve(HERE, "../cache");
 
-type Mode = "forward" | "recent" | "backfill" | "full";
+type Mode = "forward" | "recent" | "backfill" | "full" | "reresolve";
 
 interface Args {
   mode: Mode;
@@ -68,6 +72,9 @@ function parseArgs(argv: string[]): Args {
       case "--backfill":
         args.mode = "backfill";
         break;
+      case "--reresolve":
+        args.mode = "reresolve";
+        break;
       case "--out":
         args.outDir = resolve(next());
         break;
@@ -76,7 +83,7 @@ function parseArgs(argv: string[]): Args {
         break;
       case "--help":
       case "-h":
-        process.stderr.write("usage: tsx src/index.ts [--full] [--recent N] [--backfill] [--from N] [--to N] [--out DIR] [--cache DIR]\n");
+        process.stderr.write("usage: tsx src/index.ts [--full] [--recent N] [--backfill] [--reresolve] [--from N] [--to N] [--out DIR] [--cache DIR]\n");
         process.exit(0);
         break;
       default:
@@ -92,15 +99,10 @@ function log(msg: string): void {
   process.stderr.write(`[${t}s] ${msg}\n`);
 }
 
-/** Contiguous block range whose burns are fully present in burns.jsonl. */
-interface Coverage {
+/** Contiguous block range whose burns are fully present in burns.jsonl (cache/state.json). */
+interface CoverageState {
   fromBlock: number;
   toBlock: number;
-}
-
-/** The published snapshot: the core Snapshot plus the block range it actually covers. */
-export interface SnapshotFile extends Snapshot {
-  coverage: { fromBlock: number; toBlock: number; complete: boolean; partial: boolean };
 }
 
 interface RunMeta {
@@ -108,7 +110,7 @@ interface RunMeta {
   startedAt: string;
   durationMs: number;
   status: "running" | "done";
-  coverage: SnapshotFile["coverage"];
+  coverage: Coverage;
   run: {
     mode: Mode;
     fromBlock: number;
@@ -118,6 +120,17 @@ interface RunMeta {
     newBurnRecords: number;
     newForeignBurns: number;
     rpc: { requests: number; items: number; retries: number; rateLimited: number; paceFactor: number };
+  };
+  classification: {
+    /** Cached records never resolved with selector / Nest tag (run --reresolve to fix). */
+    unresolvedRecords: number;
+    /** Unknown-selector records whose receipt was inspected. */
+    receiptChecked: number;
+    /** Unknown-selector records still unknown after the receipt pass. */
+    stillUnknown: number;
+    /** Selectors outside ACTION_SELECTORS, by RF burned. */
+    unknownSelectors: Record<string, { count: number; burnedRf: number; action: string }>;
+    viaNest: { burnEvents: number; burnedRf: number };
   };
   reconciliation: {
     rfTotalSupplyWei: string;
@@ -136,7 +149,7 @@ interface RunMeta {
   cache: { burns: string; foreignBurns: string; hardwired: string; state: string; burnRecords: number };
 }
 
-function unionCoverage(a: Coverage | null, b: Coverage): Coverage {
+function unionCoverage(a: CoverageState | null, b: CoverageState): CoverageState {
   if (a === null) return b;
   const touch = b.fromBlock <= a.toBlock + 1 && b.toBlock >= a.fromBlock - 1;
   if (!touch) throw new Error(`coverage ${a.fromBlock}..${a.toBlock} and ${b.fromBlock}..${b.toBlock} are not contiguous`);
@@ -160,7 +173,7 @@ async function main(): Promise<void> {
   if (toCap > head) throw new Error(`--to ${toCap} is beyond the chain head ${head}`);
 
   // Existing coverage and caches.
-  let coverage: Coverage | null = args.mode === "full" ? null : readJson<Coverage>(paths.state);
+  let coverage: CoverageState | null = args.mode === "full" ? null : readJson<CoverageState>(paths.state);
   let burns: IndexedBurn[] = coverage ? readJsonl(paths.burns, parseBurn) : [];
   let foreign: ForeignBurn[] = coverage ? readJsonl(paths.foreign, parseForeign) : [];
   if (coverage && burns.length === 0) log(`WARNING: coverage ${coverage.fromBlock}..${coverage.toBlock} but burns.jsonl is empty`);
@@ -196,6 +209,12 @@ async function main(): Promise<void> {
       }
       break;
     }
+    case "reresolve": {
+      if (coverage === null) throw new Error("--reresolve needs an existing cache");
+      scanFrom = 1n;
+      scanTo = 0n; // nothing to scan
+      break;
+    }
     case "backfill": {
       if (coverage === null) throw new Error("--backfill needs an existing coverage (run --recent or --full first)");
       scanFrom = args.from ?? 0n;
@@ -228,8 +247,11 @@ async function main(): Promise<void> {
   if (scanFrom > scanTo) log("nothing to scan; rebuilding the snapshot from cache");
 
   // Cheap censuses first so the very first partial snapshot already carries them.
-  let hardwired = args.mode === "full" ? null : readJson<HardwiredState>(paths.hardwired);
-  if (hardwired === null || BigInt(hardwired.toBlock) > toCap || hardwired.fromBlock !== Number(HARDWIRED_FIRST_BLOCK)) hardwired = emptyHardwiredState(HARDWIRED_FIRST_BLOCK);
+  const cachedHardwired: unknown = args.mode === "full" ? null : readJson<unknown>(paths.hardwired);
+  let hardwired: HardwiredState =
+    isCurrentHardwiredState(cachedHardwired) && BigInt(cachedHardwired.toBlock) <= toCap && cachedHardwired.fromBlock === Number(HARDWIRED_FIRST_BLOCK)
+      ? cachedHardwired
+      : emptyHardwiredState(HARDWIRED_FIRST_BLOCK);
   const hardwiredFrom = BigInt(hardwired.toBlock) + 1n;
   if (hardwiredFrom <= toCap) {
     log(`hardwired: scanning ${hardwiredFrom}..${toCap}`);
@@ -255,19 +277,17 @@ async function main(): Promise<void> {
     writeJsonl(paths.foreign, foreign, serializeForeign);
     writeJson(paths.state, coverage);
     const complete = coverage.fromBlock === 0 && BigInt(coverage.toBlock) >= snapshotBlock;
-    const coverageOut: SnapshotFile["coverage"] = { fromBlock: coverage.fromBlock, toBlock: coverage.toBlock, complete, partial: !complete };
-    const snapshot: SnapshotFile = {
-      ...buildSnapshot({
-        records: burns,
-        hardwired: toSnapshotHardwired(hardwired),
-        genesis: { activated: genesis.summary.activated, inactive: genesis.summary.inactive, reserveHeld: genesis.summary.reserveHeld },
-        blockNumber: coverage.toBlock,
-        timestamp: Number(snapshotHeader.timestamp),
-      }),
+    const coverageOut: Coverage = { fromBlock: coverage.fromBlock, toBlock: coverage.toBlock, complete, partial: !complete };
+    const snapshot = buildSnapshot({
+      records: burns,
+      hardwired: toSnapshotHardwired(hardwired),
+      genesis: { activated: genesis.summary.activated, inactive: genesis.summary.inactive, reserveHeld: genesis.summary.reserveHeld },
       coverage: coverageOut,
-    };
+      blockNumber: coverage.toBlock,
+      timestamp: Number(snapshotHeader.timestamp),
+    });
     writeJson(paths.snapshot, snapshot);
-    writeJson(paths.meta, buildMeta({ status, coverage: coverageOut, mode, scanFrom, scanTo, head, windowsFlushed, newBurns, newForeign, rpc, snapshot, foreign, rfTotalSupply, genesis: genesis.summary, genesisBlock: genesis.blockNumber, hardwired, paths, burnRecords: burns.length }));
+    writeJson(paths.meta, buildMeta({ status, coverage: coverageOut, mode, scanFrom, scanTo, head, windowsFlushed, newBurns, newForeign, rpc, snapshot, burns, foreign, rfTotalSupply, genesis: genesis.summary, genesisBlock: genesis.blockNumber, hardwired, paths }));
   };
 
   const onWindow = async (w: BurnWindow): Promise<void> => {
@@ -284,12 +304,25 @@ async function main(): Promise<void> {
   if (scanFrom <= scanTo) await indexBurns(rpc, scanFrom, scanTo, { log, direction, onWindow });
   else if (coverage) flush("running");
 
+  if (mode === "reresolve") {
+    await reresolve(rpc, burns, {
+      log,
+      onSlice: (done, total) => {
+        flush("running");
+        log(`reresolve: ${done}/${total} blocks, flushed (${rpc.stats.requests} requests, ${rpc.stats.rateLimited} rate-limited, pace x${rpc.paceFactor.toFixed(2)})`);
+      },
+    });
+  }
+
   // In "recent" mode with coverage starting inside the range, also catch up to the head.
   if (mode === "recent" && coverage && BigInt(coverage.toBlock) < toCap) {
     const from = BigInt(coverage.toBlock) + 1n;
     log(`recent: catching up ${from}..${toCap} forward`);
     await indexBurns(rpc, from, toCap, { log, direction: "forward", onWindow });
   }
+
+  // Receipt pass over cached unknowns (no-op when every unknown was already checked).
+  await classifyUnknownByReceipt(rpc, burns, log);
 
   flush("done");
   if (coverage === null) throw new Error("no coverage after the run");
@@ -299,13 +332,14 @@ async function main(): Promise<void> {
   log(`snapshot written: ${paths.snapshot} (coverage ${snapshot.coverage.fromBlock}..${snapshot.coverage.toBlock}${snapshot.coverage.complete ? ", complete" : ", PARTIAL"})`);
   log(`burn events ${snapshot.totals.burnEvents}, burned ${snapshot.totals.burnedRf.toFixed(2)} RF (implied by supply ${meta.reconciliation.impliedBurnedRf.toFixed(2)}, gap ${meta.reconciliation.gapRf.toFixed(2)} = ${meta.reconciliation.gapPct.toFixed(3)}%)`);
   log(`by action: ${JSON.stringify(snapshot.totals.byAction)}`);
+  log(`via Nest: ${JSON.stringify(snapshot.totals.viaNest)}; unresolved ${meta.classification.unresolvedRecords}, still unknown ${meta.classification.stillUnknown}`);
   log(`daily series: ${snapshot.daily.length} days, leaderboard ${snapshot.leaderboard.length}`);
   log(`rpc: ${rpc.stats.requests} requests / ${rpc.stats.items} items, ${rpc.stats.retries} retries (${rpc.stats.rateLimited} rate-limited), ${((Date.now() - startedAt) / 1000).toFixed(1)} s`);
 }
 
 interface MetaInput {
   status: RunMeta["status"];
-  coverage: SnapshotFile["coverage"];
+  coverage: Coverage;
   mode: Mode;
   scanFrom: bigint;
   scanTo: bigint;
@@ -315,13 +349,13 @@ interface MetaInput {
   newForeign: number;
   rpc: Rpc;
   snapshot: SnapshotFile;
+  burns: readonly IndexedBurn[];
   foreign: readonly ForeignBurn[];
   rfTotalSupply: bigint;
   genesis: GenesisSummary;
   genesisBlock: number;
   hardwired: HardwiredState;
   paths: { burns: string; foreign: string; hardwired: string; state: string };
-  burnRecords: number;
 }
 
 function buildMeta(m: MetaInput): RunMeta {
@@ -341,6 +375,25 @@ function buildMeta(m: MetaInput): RunMeta {
   const indexedBurnedRf = m.snapshot.totals.burnedRf;
   const foreignBurnedRf = weiToRf(foreignWei);
   const gapRf = impliedBurnedRf - indexedBurnedRf;
+
+  let unresolvedRecords = 0;
+  let receiptChecked = 0;
+  let stillUnknown = 0;
+  const selectors = new Map<string, { count: number; wei: bigint; action: string }>();
+  for (const r of m.burns) {
+    if (r.selector === null) unresolvedRecords++;
+    if (r.receiptChecked) receiptChecked++;
+    if (r.action === "unknown") stillUnknown++;
+    if (r.selector !== null && !(r.selector in ACTION_SELECTORS)) {
+      const e = selectors.get(r.selector) ?? { count: 0, wei: 0n, action: r.action };
+      e.count++;
+      e.wei += r.burnedRf;
+      selectors.set(r.selector, e);
+    }
+  }
+  const unknownSelectors: RunMeta["classification"]["unknownSelectors"] = {};
+  for (const [sel, e] of [...selectors.entries()].sort((a, b) => (a[1].wei > b[1].wei ? -1 : 1)).slice(0, 20)) unknownSelectors[sel] = { count: e.count, burnedRf: weiToRf(e.wei), action: e.action };
+
   const now = Date.now();
   return {
     generatedAt: new Date(now).toISOString(),
@@ -369,10 +422,11 @@ function buildMeta(m: MetaInput): RunMeta {
       gapRf,
       gapPct: impliedBurnedRf > 0 ? (gapRf / impliedBurnedRf) * 100 : 0,
     },
+    classification: { unresolvedRecords, receiptChecked, stillUnknown, unknownSelectors, viaNest: m.snapshot.totals.viaNest },
     foreignBurns: { count: m.foreign.length, burnedRf: foreignBurnedRf, byFrom },
     genesis: { blockNumber: m.genesisBlock, unreadable: m.genesis.unreadable, inactiveByOwner: m.genesis.inactiveByOwner },
     hardwired: { fromBlock: m.hardwired.fromBlock, toBlock: m.hardwired.toBlock },
-    cache: { burns: m.paths.burns, foreignBurns: m.paths.foreign, hardwired: m.paths.hardwired, state: m.paths.state, burnRecords: m.burnRecords },
+    cache: { burns: m.paths.burns, foreignBurns: m.paths.foreign, hardwired: m.paths.hardwired, state: m.paths.state, burnRecords: m.burns.length },
   };
 }
 

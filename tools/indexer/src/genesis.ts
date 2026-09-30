@@ -54,6 +54,23 @@ export function summarizeGenesis(tokens: readonly GenesisToken[], reserve: Addre
   return { activated, inactive, reserveHeld, inactiveByOwner, unreadable };
 }
 
+interface MulticallItem {
+  status: "success" | "failure";
+  error?: unknown;
+}
+
+/**
+ * viem's multicall with `allowFailure` turns a failed eth_call (for instance an HTTP 429) into one failure
+ * per sub-call, which would silently miscount the census. A chunk where every call failed is treated as a
+ * request error so `Rpc.call` retries it.
+ */
+function rejectWholeChunkFailure<T extends MulticallItem>(results: T[]): T[] {
+  if (results.length > 0 && results.every((r) => r.status === "failure")) {
+    throw results[0]?.error ?? new Error("multicall: every call failed");
+  }
+  return results;
+}
+
 export async function censusGenesis(rpc: Rpc, log: (msg: string) => void = () => {}): Promise<{ summary: GenesisSummary; blockNumber: number; tokens: GenesisToken[] }> {
   const blockNumber = Number(await rpc.call("genesis.blockNumber", () => rpc.client.getBlockNumber()));
   const ids = Array.from({ length: GENESIS_SUPPLY }, (_, i) => i + 1);
@@ -62,17 +79,19 @@ export async function censusGenesis(rpc: Rpc, log: (msg: string) => void = () =>
 
   for (let i = 0; i < ids.length; i += MULTICALL_CHUNK) {
     const chunk = ids.slice(i, i + MULTICALL_CHUNK);
-    const results = await rpc.call(`genesis.positions[${chunk[0]}..${chunk[chunk.length - 1]}]`, () =>
-      rpc.client.multicall({
-        contracts: chunk.map((id) => ({
-          address: ADDRESSES.activationManager,
-          abi: ACTIVATION_MANAGER_ABI,
-          functionName: "positions",
-          args: [ADDRESSES.genesis, BigInt(id)],
-        })),
-        allowFailure: true,
-        batchSize: 0,
-      }),
+    const results = await rpc.call(`genesis.positions[${chunk[0]}..${chunk[chunk.length - 1]}]`, async () =>
+      rejectWholeChunkFailure(
+        await rpc.client.multicall({
+          contracts: chunk.map((id) => ({
+            address: ADDRESSES.activationManager,
+            abi: ACTIVATION_MANAGER_ABI,
+            functionName: "positions",
+            args: [ADDRESSES.genesis, BigInt(id)],
+          })),
+          allowFailure: true,
+          batchSize: 0,
+        }),
+      ),
     );
     results.forEach((r, j) => {
       const id = chunk[j];
@@ -91,12 +110,14 @@ export async function censusGenesis(rpc: Rpc, log: (msg: string) => void = () =>
   const inactive = tokens.filter((t) => t.weight === 0n);
   for (let i = 0; i < inactive.length; i += MULTICALL_CHUNK) {
     const chunk = inactive.slice(i, i + MULTICALL_CHUNK);
-    const results = await rpc.call(`genesis.ownerOf[${i}..${i + chunk.length - 1}]`, () =>
-      rpc.client.multicall({
-        contracts: chunk.map((t) => ({ address: ADDRESSES.genesis, abi: GENESIS_ABI, functionName: "ownerOf", args: [BigInt(t.id)] })),
-        allowFailure: true,
-        batchSize: 0,
-      }),
+    const results = await rpc.call(`genesis.ownerOf[${i}..${i + chunk.length - 1}]`, async () =>
+      rejectWholeChunkFailure(
+        await rpc.client.multicall({
+          contracts: chunk.map((t) => ({ address: ADDRESSES.genesis, abi: GENESIS_ABI, functionName: "ownerOf", args: [BigInt(t.id)] })),
+          allowFailure: true,
+          batchSize: 0,
+        }),
+      ),
     );
     results.forEach((r, j) => {
       const t = chunk[j];
@@ -106,6 +127,6 @@ export async function censusGenesis(rpc: Rpc, log: (msg: string) => void = () =>
   }
 
   const summary = summarizeGenesis(tokens);
-  if (positionFailures > 0) log(`genesis: WARNING ${positionFailures} positions() calls failed`);
+  if (positionFailures > 0) throw new Error(`genesis: ${positionFailures} positions() calls failed; refusing to publish a wrong census`);
   return { summary, blockNumber, tokens };
 }
