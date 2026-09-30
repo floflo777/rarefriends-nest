@@ -87,6 +87,9 @@ const GENERIC_FRAME = `
 ......####......
 ................`;
 
+/** Key of the household's own RF balance in the set of simulated-only state. */
+const HOUSEHOLD = "household";
+
 /** Rewards accrue this many times faster than on chain, so hunger returns within minutes. */
 export const DEMO_TIME_SCALE = 1000;
 const WEEK_S = 7 * 86_400;
@@ -231,6 +234,12 @@ export interface MockOptions {
 export interface MockSource extends NestDataSource {
   /** Apply a Steward action's prepared transactions to the fixtures (demo mode). Returns a one-line description. */
   simulate(action: StewardAction): string;
+  /**
+   * True when the action's on-chain precondition may exist only in this simulation: its Friend
+   * (or, for Hatch and Save, the household balance) was changed by an earlier simulated action,
+   * so a dry-run against the real chain would judge a state that is not there.
+   */
+  isSimulated(action: StewardAction): boolean;
   /** Reset fixtures to their initial state (tests). */
   reset(): void;
   readonly timeScale: number;
@@ -273,6 +282,14 @@ export function createMockSource(options: MockOptions = {}): MockSource {
   let lastActionAt = 0;
   let baseSnapshot: Promise<Snapshot> | null = null;
   const hatchedSprites = new Map<string, Sprite>();
+  /**
+   * State that exists only in this simulation: `position:<key>` (tier, generation, awake),
+   * `savings:<key>` (the Friend's wallet balance), and HOUSEHOLD (the owner's RF balance).
+   */
+  const touched = new Set<string>();
+  const mark = (aspect: "position" | "savings", f: Pick<Friend, "collection" | "tokenId">): void => {
+    touched.add(`${aspect}:${friendKey(f.collection, f.tokenId)}`);
+  };
   let readScene = options.scene;
 
   const init = (): void => {
@@ -292,6 +309,7 @@ export function createMockSource(options: MockOptions = {}): MockSource {
     actionsDelta = 0;
     lastActionAt = 0;
     hatchedSprites.clear();
+    touched.clear();
   };
   init();
 
@@ -321,11 +339,21 @@ export function createMockSource(options: MockOptions = {}): MockSource {
   const put = (updated: Friend): void => {
     pets.set(friendKey(updated.collection, updated.tokenId), { friend: updated, since: nowS() });
   };
+  /** The household's own RF balance moved (a simulated spend, save or withdraw). */
+  const touchHousehold = (): void => {
+    touched.add(HOUSEHOLD);
+  };
 
-  /** A paid action: RF leaves the wallet, half is burned, half streams; weight moves. */
-  const pay = (costWei: bigint, deltaWeight: bigint): void => {
-    rfBalance -= costWei;
-    rfAllowance = 0n;
+  /**
+   * A paid action: RF leaves the payer's wallet, half is burned, half streams; weight moves.
+   * The payer is the Friend's real owner: an extra pet's spend never comes out of the household.
+   */
+  const pay = (costWei: bigint, deltaWeight: bigint, payer: Address): void => {
+    if (isAddressEqual(payer, fixture.owner)) {
+      rfBalance -= costWei;
+      rfAllowance = 0n;
+      touchHousehold();
+    }
     const burned = costWei / 2n;
     burnedDeltaRf += weiToRf(burned);
     actionsDelta += 1;
@@ -343,7 +371,11 @@ export function createMockSource(options: MockOptions = {}): MockSource {
       const [to, amount] = call.args;
       const target = current().find((f) => isAddressEqual(f.wallet, to));
       rfBalance -= amount;
-      if (target) put({ ...target, savings: { ...target.savings, rf: target.savings.rf + amount } });
+      touchHousehold();
+      if (target) {
+        put({ ...target, savings: { ...target.savings, rf: target.savings.rf + amount } });
+        mark("savings", target);
+      }
       return `Saved ${rf(amount)} RF into ${target ? `#${target.tokenId}'s` : "the"} wallet`;
     }
     throw new Error(`mock: unsupported RF call ${call.functionName}`);
@@ -360,7 +392,11 @@ export function createMockSource(options: MockOptions = {}): MockSource {
     if (transfer.functionName !== "transfer") throw new Error(`mock: unsupported inner call ${transfer.functionName}`);
     const [to, amount] = transfer.args;
     put({ ...friend, savings: { ...friend.savings, rf: friend.savings.rf - amount } });
-    if (isAddressEqual(to, fixture.owner)) rfBalance += amount;
+    mark("savings", friend);
+    if (isAddressEqual(to, fixture.owner)) {
+      rfBalance += amount;
+      touchHousehold();
+    }
     return `Withdrew ${rf(amount)} RF from #${friend.tokenId}'s wallet`;
   };
 
@@ -378,6 +414,7 @@ export function createMockSource(options: MockOptions = {}): MockSource {
           rewards: isRf ? { ...friend.rewards, earnedRf: 0n } : { ...friend.rewards, earnedWeth: 0n },
           savings: isRf ? { ...friend.savings, rf: friend.savings.rf + amount } : { ...friend.savings, weth: friend.savings.weth + amount },
         });
+        mark("savings", friend);
         return `Fed #${friend.tokenId}: ${isRf ? `${rf(amount)} RF` : `${weiToRf(amount).toFixed(4)} WETH`} claimed to its wallet`;
       }
       case "upgrade": {
@@ -386,8 +423,9 @@ export function createMockSource(options: MockOptions = {}): MockSource {
         if (!friend) throw new Error("mock: upgrade on an unknown Friend");
         const tier = friend.position.tier + 1;
         const weight = rfToWei(weightFor(friend.collection, friend.generation, tier));
-        pay(upgradeCostWei(friend.collection, friend.generation, friend.position.tier), weight - friend.position.weight);
+        pay(upgradeCostWei(friend.collection, friend.generation, friend.position.tier), weight - friend.position.weight, friend.owner);
         put({ ...friend, position: { tier, weight, active: true } });
+        mark("position", friend);
         return `Trained #${friend.tokenId} to tier ${tier}`;
       }
       case "promote": {
@@ -396,8 +434,9 @@ export function createMockSource(options: MockOptions = {}): MockSource {
         if (!friend) throw new Error("mock: promote on an unknown Friend");
         const generation = friend.generation - 1;
         const weight = friend.position.active ? rfToWei(weightFor("Generations", generation, 0)) : friend.position.weight;
-        pay(promoteCostWei(friend.generation), weight - friend.position.weight);
+        pay(promoteCostWei(friend.generation), weight - friend.position.weight, friend.owner);
         put({ ...friend, generation, position: { tier: 0, weight, active: friend.position.active } });
+        mark("position", friend);
         return `Raised #${friend.tokenId} to Gen ${generation}`;
       }
       case "activate": {
@@ -405,8 +444,9 @@ export function createMockSource(options: MockOptions = {}): MockSource {
         const friend = find(collectionOf(collection), tokenId);
         if (!friend) throw new Error("mock: activate on an unknown Friend");
         const weight = rfToWei(weightFor(friend.collection, friend.generation, friend.position.tier));
-        pay(activateCostWei(friend.collection, friend.generation), weight);
+        pay(activateCostWei(friend.collection, friend.generation), weight, friend.owner);
         put({ ...friend, position: { ...friend.position, weight, active: true } });
+        mark("position", friend);
         return `Woke ${friend.collection} #${friend.tokenId}`;
       }
       case "hardwire": {
@@ -424,7 +464,7 @@ export function createMockSource(options: MockOptions = {}): MockSource {
           rewards: { earnedRf: 0n, earnedWeth: 0n },
           savings: { rf: 0n, weth: 0n, eth: 0n },
         };
-        pay(hardwireCostWei(generation), pup.position.weight);
+        pay(hardwireCostWei(generation), pup.position.weight, fixture.owner);
         put(pup);
         hatchedSprites.set(friendKey(pup.collection, pup.tokenId), spriteFromPose(GENERIC_FRAME));
         egg = id + 1n;
@@ -531,6 +571,18 @@ export function createMockSource(options: MockOptions = {}): MockSource {
         if (result) line = line ? `${line}; ${result}` : result;
       }
       return line || `Nothing to do for ${action.label}`;
+    },
+    isSimulated(action) {
+      // Hatch picks its generation from the balance; Save moves part of it.
+      if (action.kind === "hatch" || action.kind === "save") return touched.has(HOUSEHOLD);
+      const f = action.friend;
+      if (!f) return false;
+      const key = friendKey(f.collection, f.tokenId);
+      if (hatchedSprites.has(key)) return true; // the pup does not exist on chain
+      // Withdraw needs the savings; Train, Raise and Wake need the tier, generation and awake state.
+      if (action.kind === "withdraw") return touched.has(`savings:${key}`);
+      if (action.kind === "train" || action.kind === "raise" || action.kind === "wake") return touched.has(`position:${key}`);
+      return false;
     },
     reset() {
       init();

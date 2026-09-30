@@ -5,6 +5,7 @@ import { DataSourceProvider } from "../data/context.jsx";
 import { createLiveSource } from "../data/live.js";
 import { DEMO_OWNER, DEMO_TIME_SCALE, createMockSource } from "../data/mock.js";
 import { Device } from "../device/Device.jsx";
+import { deepLink } from "../deepLink.js";
 import { shortAddress } from "../model/format.js";
 import { runDemo, type DemoPhase } from "../screens/run.js";
 
@@ -23,7 +24,7 @@ export function DemoPage() {
   const mock = useMemo(() => createMockSource({ snapshot: () => live.snapshot(), scene: (f) => live.scene(f) }), [live]);
   const [phase, setPhase] = useState<DemoPhase | null>(null);
   const onSimulate = useCallback(
-    (action: StewardAction) => runDemo(action, { client: live.client, owner: DEMO_OWNER, simulate: (a) => mock.simulate(a), onPhase: setPhase }).then((r) => ({ line: r.line, applied: r.applied })),
+    (action: StewardAction) => runDemo(action, { client: live.client, owner: DEMO_OWNER, simulate: (a) => mock.simulate(a), isSimulated: (a) => mock.isSimulated(a), onPhase: setPhase }).then((r) => ({ line: r.line, applied: r.applied })),
     [live, mock],
   );
   const { fixture } = mock;
@@ -51,8 +52,8 @@ export function DemoPage() {
               </p>
               <nav className="under">
                 <Link to="/">Home</Link>
-                <Link to="/card/gen/1969?demo">Pet card</Link>
-                <Link to="/ledger">Ledger</Link>
+                <Link to={deepLink("/card/gen/1969?demo")}>Pet card</Link>
+                <Link to={deepLink("/ledger")}>Ledger</Link>
               </nav>
             </>
           }

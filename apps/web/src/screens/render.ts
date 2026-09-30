@@ -8,7 +8,7 @@ import { ICONS, blitFrame, blitRows, drawBar, drawIcon, fillRect, frameBounds, f
 import { CHAR_ADVANCE, LINE_ADVANCE, textWidth } from "../lcd/font.js";
 import { COLS, LCD_H, LCD_W, createPainter, fit, fitSentence, imageOf, invertRect, row, text, textCentered, textRight, wrap, type Painter, type ScreenImage } from "../lcd/paint.js";
 import type { SourceErrorCode } from "../data/source.js";
-import { careCost, careLabel, confirmHeader, confirmRationale, squeezeLabel, type CareItem } from "../model/care.js";
+import { careCost, careLabel, confirmHeader, confirmRationale, notRefundedLines, shortConclusion, squeezeLabel, type CareItem } from "../model/care.js";
 import { compact, compactWei, grouped, percent, shortAddress, shortHash } from "../model/format.js";
 import { MOOD_ICON, genTier, identityOf, idleMotion, lastCareAt, petState, territorySteps, type PetMemory } from "../model/pet.js";
 import type { TokenScene } from "../model/scene.js";
@@ -182,11 +182,67 @@ function generationBand(p: Painter, x: number, y: number, steps: number): void {
   p.transcript.push(`GEN BAND ${steps}/6`);
 }
 
-/** A Genesis portrait is 8x8 in the frame's top-left: draw it x3; everything else x2. */
-function spriteScale(f: Friend, frame: Parameters<typeof frameBounds>[0]): 2 | 3 {
-  if (f.collection !== "Genesis") return 2;
-  const b = frameBounds(frame);
-  return b && b.maxX < 8 && b.maxY < 8 ? 3 : 2;
+/** The sprite box left of the text column: the pet stands on the land strip at its bottom. */
+const BOX_X = 2;
+const BOX_Y = 8;
+const BOX_W = 36;
+const BOX_H = 32;
+const LAND_Y = BOX_Y + BOX_H;
+
+/**
+ * How big the Friend is drawn: a Gen-6 pup 1x, Gen-5..3 2x, Gen-2..1 and Genesis 3x, so a
+ * Raise visibly grows it. Integer scales only.
+ */
+export function growthScale(f: Pick<Friend, "collection" | "generation">): 1 | 2 | 3 {
+  if (f.collection === "Genesis") return 3;
+  if (f.generation >= 6) return 1;
+  return f.generation >= 3 ? 2 : 3;
+}
+
+type Bounds = NonNullable<ReturnType<typeof frameBounds>>;
+const clipBoundsCache = new WeakMap<Sprite, Bounds | null>();
+
+/** Union of the lit area over all 64 frames, so the scale and anchor never jump mid-clip. */
+function clipBounds(sprite: Sprite): Bounds | null {
+  if (clipBoundsCache.has(sprite)) return clipBoundsCache.get(sprite) ?? null;
+  let u: Bounds | null = null;
+  for (const frame of sprite.frames) {
+    const b = frameBounds(frame);
+    if (!b) continue;
+    const minX = Math.min(u?.minX ?? b.minX, b.minX);
+    const minY = Math.min(u?.minY ?? b.minY, b.minY);
+    const maxX = Math.max(u?.maxX ?? b.maxX, b.maxX);
+    const maxY = Math.max(u?.maxY ?? b.maxY, b.maxY);
+    u = { minX, minY, maxX, maxY, width: maxX - minX + 1, height: maxY - minY + 1 };
+  }
+  clipBoundsCache.set(sprite, u);
+  return u;
+}
+
+/** The generation's scale, reduced (still an integer) until the clip's lit area fits the box. */
+export function fittedScale(f: Pick<Friend, "collection" | "generation">, bounds: Pick<Bounds, "width" | "height">): number {
+  return Math.max(1, Math.min(growthScale(f), Math.floor(BOX_W / bounds.width), Math.floor(BOX_H / bounds.height)));
+}
+
+/** Draws `frame` at the Friend's growth scale, centred and standing on the land strip. */
+function drawGrown(p: Painter, f: Friend, sprite: Sprite, frame: Sprite["frames"][number], dx = 0, dy = 0): void {
+  const b = clipBounds(sprite) ?? frameBounds(frame);
+  if (!b) return;
+  const scale = fittedScale(f, b);
+  const w = b.width * scale;
+  const h = b.height * scale;
+  const left = Math.max(0, Math.min(BOX_X + BOX_W + 1 - w, BOX_X + Math.floor((BOX_W - w) / 2) + dx));
+  const top = Math.max(BOX_Y - 1, LAND_Y - h + dy);
+  blitFrame(p.lcd, frame, left - b.minX * scale, top - b.minY * scale, scale);
+  p.transcript.push(`SPRITE X${scale}`);
+}
+
+/** A thin 1-bit strip of land under the pet: as wide as the generation band says (Gen-6 a sixth, Gen-1 all). */
+function land(p: Painter, steps: number): void {
+  const w = Math.max(2, Math.round((BOX_W * Math.min(6, Math.max(1, steps))) / 6));
+  const x = BOX_X + Math.floor((BOX_W - w) / 2);
+  fillRect(p.lcd, x, LAND_Y, w, 1);
+  p.transcript.push(`LAND ${steps}/6`);
 }
 
 function renderPet(p: Painter, m: ScreenModel): void {
@@ -205,16 +261,12 @@ function renderPet(p: Painter, m: ScreenModel): void {
   if (m.sprite) {
     const clip = m.reducedMotion || pet.animation.clip === "idle" ? m.sprite.idle : m.sprite.walk;
     const frame = clip[m.reducedMotion || idle.still ? 0 : frameIndexAt(pet.animation, m.now, clip.length)];
-    if (frame) {
-      const scale = spriteScale(f, frame);
-      // x3 portraits (24 px) sit centred in the 32 px sprite box.
-      const offset = scale === 3 ? 4 : 0;
-      blitFrame(p.lcd, frame, 3 + offset + idle.dx, ROW0 + offset, scale);
-    }
+    if (frame) drawGrown(p, f, m.sprite, frame, m.reducedMotion ? 0 : idle.dx);
   } else if (!m.loading) {
     text(p, 7, ROW0 + 10, "NO");
     text(p, 3, ROW0 + 17, "SPRITE");
   }
+  land(p, territorySteps(f));
   generationBand(p, 4, ROW0 + 32, territorySteps(f));
 
   const x = 40;
@@ -324,7 +376,10 @@ function renderConfirm(p: Painter, state: MachineState, m: ScreenModel): void {
     invertRect(p, 30, by - 1, 36, 7);
     return;
   }
-  fitSentence(confirmRationale(action), COLS - 1, 3).forEach((l, i) => text(p, 1, tightY(5 + i), l));
+  const notRefunded = notRefundedLines(action, COLS - 1);
+  const conclusion = notRefunded ? shortConclusion(action, COLS - 1) : null;
+  const rationale = notRefunded ? [...notRefunded, ...(conclusion ? [conclusion] : [])] : fitSentence(confirmRationale(action), COLS - 1, 3);
+  rationale.forEach((l, i) => text(p, 1, tightY(5 + i), l));
   text(p, 14, by, "[ NO ]");
   text(p, 58, by, "[ YES ]");
   p.transcript.push(c.choice === "no" ? "SELECTED NO" : "SELECTED YES");
@@ -426,15 +481,14 @@ function icon2x(p: Painter, name: IconName, x: number, y: number, mask?: (row: n
 }
 
 /** Sprite box: the pet's idle clip at `fps` (hop = double rate), frame 0 when still. */
-function reactionSprite(p: Painter, m: ScreenModel, f: Friend, animate: boolean, fpsScale: number, dy = 0): void {
+function reactionSprite(p: Painter, m: ScreenModel, f: Friend, animate: boolean, fpsScale: number, dy = 0, steps = territorySteps(f)): void {
   if (!m.sprite) return;
   const pet = petState(f, m.protocol, m.now, m.memory);
   const clip = m.sprite.idle;
   const frame = clip[animate ? frameIndexAt({ ...pet.animation, fps: pet.animation.fps * fpsScale }, m.now, clip.length) : 0];
   if (!frame) return;
-  const scale = spriteScale(f, frame);
-  const offset = scale === 3 ? 4 : 0;
-  blitFrame(p.lcd, frame, 3 + offset, ROW0 + offset + dy, scale);
+  drawGrown(p, f, m.sprite, frame, 0, dy);
+  land(p, steps);
 }
 
 /** Eight sparkle pixels around the 32 px sprite box, positions stepping with the frame. */
@@ -513,7 +567,9 @@ function renderReaction(p: Painter, r: Reaction, m: ScreenModel): void {
     }
     case "moving": {
       if (f) {
-        reactionSprite(p, m, f, fr.moving, 1);
+        // The evolution moment: once the band steps up, the pet is drawn at its new generation's size.
+        const grown = f.collection === "Generations" && fr.step > r.steps.from ? { ...f, generation: Math.max(1, f.generation - 1) } : f;
+        reactionSprite(p, m, grown, fr.moving, 1, 0, fr.step);
         generationBand(p, 4, ROW0 + 32, fr.step);
         const gen = f.collection === "Genesis" ? null : f.generation;
         text(p, x, rowY(0), gen === null ? "GENESIS" : `GEN ${gen}`);

@@ -1,6 +1,6 @@
 {
-  "bakedAt": "2026-09-30T12:17:33.011Z",
-  "blockNumber": "76508845",
+  "bakedAt": "2026-09-30T13:11:17.670Z",
+  "blockNumber": "76540887",
   "owner": "0x3d35a856cb96f9770c986841f4fdb7e198a272cb",
   "household": {
     "eggTokenId": "343696",
@@ -20,8 +20,8 @@
         "active": true
       },
       "rewards": {
-        "earnedRf": "36459884938593427592595",
-        "earnedWeth": "22856219406022553"
+        "earnedRf": "36637183064715633896874",
+        "earnedWeth": "22917570449145434"
       },
       "savings": {
         "rf": "0",
@@ -46,8 +46,8 @@
         "active": true
       },
       "rewards": {
-        "earnedRf": "139313530433989566",
-        "earnedWeth": "48207110814"
+        "earnedRf": "223969392463603825",
+        "earnedWeth": "77500852128"
       },
       "savings": {
         "rf": "0",
@@ -72,8 +72,8 @@
         "active": true
       },
       "rewards": {
-        "earnedRf": "156236981728044747",
-        "earnedWeth": "54063187316"
+        "earnedRf": "240892843757659006",
+        "earnedWeth": "83356928629"
       },
       "savings": {
         "rf": "0",
@@ -98,8 +98,8 @@
         "active": true
       },
       "rewards": {
-        "earnedRf": "162024356125431186351115",
-        "earnedWeth": "61446885037867195"
+        "earnedRf": "162876239013706051476777",
+        "earnedWeth": "61741664824643800"
       },
       "savings": {
         "rf": "0",
@@ -110,6 +110,31 @@
       "extra": true,
       "familyName": "Genesis",
       "seed": 597
+    },
+    {
+      "collection": "Genesis",
+      "tokenId": "929",
+      "owner": "0x113941782D3eB0B80a6611A3b1DDFeC16e82bd6e",
+      "wallet": "0x0c75eDbD13555A4c58b11825eacB7736f38a8564",
+      "generation": 0,
+      "position": {
+        "tier": 0,
+        "weight": "0",
+        "active": false
+      },
+      "rewards": {
+        "earnedRf": "23416583405702172540",
+        "earnedWeth": "83751690878463"
+      },
+      "savings": {
+        "rf": "291189260497146399538",
+        "weth": "0",
+        "eth": "0"
+      },
+      "sprite": "portrait:3:929",
+      "extra": true,
+      "familyName": "Genesis",
+      "seed": 929
     }
   ],
   "sprites": {
@@ -333,22 +358,30 @@
       "words": [
         "0x381c181818183ffc1ff81ff80ff00ff003c007e00ff009900ff007e00000"
       ]
+    },
+    "portrait:3:929": {
+      "kind": "portrait",
+      "family": 3,
+      "seed": 929,
+      "words": [
+        "0xe70066006600ff03ffc3ffc0ff00ff001800ff0099009900ff009900000"
+      ]
     }
   },
   "protocol": {
-    "timestamp": 1790770648,
-    "totalWeight": "1068733189306250000000000000",
+    "timestamp": 1790773872,
+    "totalWeight": "1068733486406250000000000000",
     "rfStream": {
-      "amount": "8554828550000000000342400",
+      "amount": "8554944050000000000342400",
       "periodFinish": 1790780946,
-      "lastUpdate": 1790770637
+      "lastUpdate": 1790773309
     },
     "wethStream": {
-      "amount": "2094453888403100058",
+      "amount": "2096856718544817766",
       "periodFinish": 1790780947,
-      "lastUpdate": 1790770637
+      "lastUpdate": 1790773328
     },
-    "rfTotalSupply": "947731284066837858865375706"
+    "rfTotalSupply": "947731168566837858865375706"
   },
   "census": {
     "source": "public/data/snapshot.json @ block 76481919",
@@ -378,6 +411,10 @@
           "count": 25206,
           "burnedRf": 759315.275
         }
+      },
+      "viaNest": {
+        "burnEvents": 0,
+        "burnedRf": 0
       }
     },
     "daily": [
@@ -422,93 +459,107 @@
         "owner": "0x1EcBF27dC1F809179B9ef2d382cd76ccBa21B6d2",
         "burnedRf": 21650000,
         "actions": 433,
-        "lastActionAt": 1789650423
+        "lastActionAt": 1789650423,
+        "viaNestRf": 0
       },
       {
         "owner": "0x97f290319734D0ce22215079417F3fE6A6439932",
         "burnedRf": 3731220,
         "actions": 293,
-        "lastActionAt": 1790539001
+        "lastActionAt": 1790539001,
+        "viaNestRf": 0
       },
       {
         "owner": "0x79D4687D77272A2347f0AaE383B650204D1A96c3",
         "burnedRf": 2012445,
         "actions": 50,
-        "lastActionAt": 1790619358
+        "lastActionAt": 1790619358,
+        "viaNestRf": 0
       },
       {
         "owner": "0x9ff84B91998dF96A6587DB8dDe8D4E47518107d6",
         "burnedRf": 1668750,
         "actions": 33,
-        "lastActionAt": 1790474812
+        "lastActionAt": 1790474812,
+        "viaNestRf": 0
       },
       {
         "owner": "0x3405f96358a55c38598255F6BcEfD21CC8eaC678",
         "burnedRf": 1506249,
         "actions": 38,
-        "lastActionAt": 1790353414
+        "lastActionAt": 1790353414,
+        "viaNestRf": 0
       },
       {
         "owner": "0xAbE0cDD036456Fcc1B64d1DdB7aA3bdF7d5B98B1",
         "burnedRf": 1036531.25,
         "actions": 35,
-        "lastActionAt": 1789730470
+        "lastActionAt": 1789730470,
+        "viaNestRf": 0
       },
       {
         "owner": "0xB5e1fb8f78a32877d7d302C136B75Dcb4820c28c",
         "burnedRf": 762625,
         "actions": 51,
-        "lastActionAt": 1790653341
+        "lastActionAt": 1790653341,
+        "viaNestRf": 0
       },
       {
         "owner": "0x210a80C89c5Aa7b12eC10fd7BeFd8747D21daf4F",
         "burnedRf": 753129.5,
         "actions": 16,
-        "lastActionAt": 1790528073
+        "lastActionAt": 1790528073,
+        "viaNestRf": 0
       },
       {
         "owner": "0xf17017dD78887f7A6d03a81E36FfBdF67eac2B8a",
         "burnedRf": 706458.125,
         "actions": 19,
-        "lastActionAt": 1789729944
+        "lastActionAt": 1789729944,
+        "viaNestRf": 0
       },
       {
         "owner": "0xa9A4a3a03514e58CD59A13Bb54230d588Ff58F62",
         "burnedRf": 656875,
         "actions": 23,
-        "lastActionAt": 1790733043
+        "lastActionAt": 1790733043,
+        "viaNestRf": 0
       },
       {
         "owner": "0x016099f9c894285B4BCf82424A4dbDE44195ebBC",
         "burnedRf": 648698.09375,
         "actions": 275,
-        "lastActionAt": 1790620759
+        "lastActionAt": 1790620759,
+        "viaNestRf": 0
       },
       {
         "owner": "0x0Acd70f0Ad1C809Cc3B90Dad4a3BC3d1E82c4e47",
         "burnedRf": 600208.125,
         "actions": 17,
-        "lastActionAt": 1789723881
+        "lastActionAt": 1789723881,
+        "viaNestRf": 0
       },
       {
         "owner": "0x30Df16cd7D612C5B25bEb0331486b127a42Ac371",
         "burnedRf": 312505,
         "actions": 8,
-        "lastActionAt": 1790611477
+        "lastActionAt": 1790611477,
+        "viaNestRf": 0
       }
     ],
     "hardwired": {
-      "total": 62336,
+      "total": 62461,
       "byGeneration": {
         "1": 522,
         "2": 335,
-        "3": 1028,
-        "4": 4220,
-        "5": 15527,
-        "6": 40704
+        "3": 1032,
+        "4": 4223,
+        "5": 15528,
+        "6": 40821
       },
-      "wallets": 3739,
-      "firstBlock": 64590957
+      "wallets": 3747,
+      "firstBlock": 64590957,
+      "maxTokenId": 343845
     },
     "genesis": {
       "activated": 495,

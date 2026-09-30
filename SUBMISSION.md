@@ -18,9 +18,10 @@ https://github.com/floflo777/rarefriends-nest · TypeScript, viem, React, Vite P
 
 **Playable preview / demo**
 - Handheld: https://floflo777.github.io/rarefriends-nest/
-- Visitor mode, no wallet: https://floflo777.github.io/rarefriends-nest/pet/gen/1969 — any Friend by id, read-only (also /pet/genesis/597)
-- Demo, no gas: https://floflo777.github.io/rarefriends-nest/demo — a simulated household built from real Friends, every action labelled SIMULATED
-- Ledger: https://floflo777.github.io/rarefriends-nest/ledger
+- Visitor mode, no wallet: https://floflo777.github.io/rarefriends-nest/?p=/pet/gen/1969 — any Friend by id, read-only (also https://floflo777.github.io/rarefriends-nest/?p=/pet/genesis/597)
+- Demo, no gas: https://floflo777.github.io/rarefriends-nest/?p=/demo — a simulated household built from real Friends, every action labelled SIMULATED, including WAKE of a real sleeping Genesis (#929) dry-run on chain from its owner
+- Ledger: https://floflo777.github.io/rarefriends-nest/?p=/ledger
+- Pet card (PNG): https://floflo777.github.io/rarefriends-nest/?p=/card/gen/1969
 - Agents: `git clone https://github.com/floflo777/rarefriends-nest && npm ci && npx tsx apps/cli/src/nest.ts state gen 1969` (also `state genesis 597`, `meta gen 1969`, `plan <address> --dry-run`, `census`)
 Wallet requirements for real care: an injected wallet (MetaMask, Rabby) on Robinhood Chain (4663) owning a hardwired Generations NFT or a Genesis; ETH for gas; RF for paid actions.
 

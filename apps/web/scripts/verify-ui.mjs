@@ -6,6 +6,10 @@
 // the verdict, and a paid CONFIRM (Train) opens on NO; /ledger
 // shows the snapshot or the "not built yet" state; /card/gen/1969 draws the card; the landing
 // page carries a live LCD and the three entry points.
+// Final pass: demo WAKE of the sleeping Genesis #929 (100,000 RF, burn 50,000, ~6.3 WK) dry-runs
+// OK on chain; the Raise CONFIRM of a trained pup names the RF NOT REFUNDED; the PET sprite scale
+// differs between a Gen-4 and a Gen-1; the card PNG carries the tokenURI scene; the demo button
+// is above the fold at 1280x800; /?p=/demo lands on the demo.
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -156,6 +160,25 @@ await page.locator('canvas.card[data-ready="true"]').waitFor({ timeout: 90_000 }
 await page.waitForTimeout(300);
 await page.screenshot({ path: resolve(OUT, "card.png") });
 check(true, "card: drawn");
+await page.locator('canvas.card[data-scene="true"]').waitFor({ timeout: 90_000 }).catch(() => {});
+const card = await page.evaluate(() => {
+  const c = document.querySelector("canvas.card");
+  let png = "";
+  try {
+    png = c.toDataURL("image/png"); // throws on a tainted canvas: the PNG could not be downloaded
+  } catch (e) {
+    return { scene: c.dataset.scene, png: `tainted: ${e}`, colours: 0 };
+  }
+  // The scene panel (x 284..504, y 185..405): count pixels that are neither card colour.
+  const d = c.getContext("2d").getImageData(290, 191, 208, 208).data;
+  const seen = new Set();
+  for (let i = 0; i < d.length; i += 4) {
+    const k = `${d[i]},${d[i + 1]},${d[i + 2]}`;
+    if (k !== "197,216,164" && k !== "49,64,31") seen.add(k);
+  }
+  return { scene: c.dataset.scene, png: png.slice(0, 22), colours: seen.size };
+});
+check(card.scene === "true" && card.png.startsWith("data:image/png") && card.colours > 3, `card: PNG contains the tokenURI scene (${JSON.stringify(card)})`);
 
 // 5. Landing: live LCD of #1969 above the three entry points.
 await page.goto(`${BASE}/`);
@@ -170,6 +193,102 @@ await page.waitForTimeout(300);
 const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
 check(!overflow, "landing: no horizontal overflow at 360px");
 await page.screenshot({ path: resolve(OUT, "landing-mobile.png"), fullPage: true });
+
+// 6. Landing at 1280x800: the demo button sits above the fold.
+await page.setViewportSize({ width: 1280, height: 800 });
+await page.goto(`${BASE}/`);
+const demoBtn = page.getByRole("link", { name: "Try the demo (no wallet)" });
+await demoBtn.waitFor();
+const box = await demoBtn.boundingBox();
+check(box !== null && box.y + box.height <= 800, `landing 1280x800: demo button above the fold (bottom ${box ? Math.round(box.y + box.height) : "?"} px)`);
+await page.screenshot({ path: resolve(OUT, "landing-1280.png") });
+await page.setViewportSize({ width: 520, height: 760 });
+
+// 7. /?p=/demo (the HTTP-200 deep link) lands on the demo route.
+await page.goto(`${BASE}/?p=/demo`);
+await waitForText(page, (t) => t.includes("SIM") && t.includes("G1 T2"));
+check(new URL(page.url()).pathname.endsWith("/demo"), `deep link: /?p=/demo lands on ${new URL(page.url()).pathname}`);
+check(await page.getByLabel("Demo notice").isVisible(), "deep link: demo notice shown");
+
+const right = () => page.getByRole("button", { name: "Right" }).click();
+const okBtn = () => page.getByRole("button", { name: "OK" }).click();
+/** From PET: HOUSEHOLD, focus, move to row `index`, pick it (back on PET). */
+async function pickPet(index) {
+  for (let i = 0; i < 4; i++) await right();
+  await waitForText(page, (t) => t[0] === "HOUSEHOLD");
+  await okBtn();
+  for (let i = 0; i < index; i++) await right();
+  await okBtn();
+}
+/** From PET: open CARE and move the cursor to the row starting with `label`. */
+async function careTo(label) {
+  await okBtn();
+  for (let i = 0; i < 8; i++) {
+    const t = await lcdText(page);
+    if (t.some((l) => l.startsWith(`> ${label}`))) return true;
+    await right();
+  }
+  return false;
+}
+/** A bounding-box height of the lit sprite in the PET sprite box. */
+const spriteHeight = () =>
+  page.evaluate(() => {
+    const c = document.querySelector("canvas.lcd");
+    const d = c.getContext("2d").getImageData(0, 8, 39, 32).data;
+    let top = 99;
+    let bottom = -1;
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 39; x++) if (d[(y * 39 + x) * 4] === 15) (top = Math.min(top, y)), (bottom = Math.max(bottom, y));
+    return bottom - top + 1;
+  });
+
+// 8. Growth: Gen-1 #1969 against Gen-4 #315174 on the demo PET screen.
+const gen1 = await waitForText(page, (t) => t.some((l) => l.startsWith("SPRITE X")));
+const gen1Height = await spriteHeight();
+await page.screenshot({ path: resolve(OUT, "grow-gen1.png") });
+await pickPet(1);
+const gen4 = await waitForText(page, (t) => t.includes("G4 T1") && t.some((l) => l.startsWith("SPRITE X")));
+const gen4Height = await spriteHeight();
+await page.screenshot({ path: resolve(OUT, "grow-gen4.png") });
+const scaleOf = (t) => t.find((l) => l.startsWith("SPRITE X"));
+check(scaleOf(gen1) === "SPRITE X3" && scaleOf(gen4) === "SPRITE X2" && gen1Height > gen4Height, `growth: Gen-1 ${scaleOf(gen1)} (${gen1Height} px) vs Gen-4 ${scaleOf(gen4)} (${gen4Height} px)`);
+check(gen1.includes("LAND 6/6") && gen4.includes("LAND 3/6"), "growth: land strip follows the generation band");
+
+// 9. Raise CONFIRM on the trained Gen-4: the not-refunded figure.
+check(await careTo("RAISE"), "raise: CARE row found");
+await okBtn();
+const raise = await waitForText(page, (t) => t[0] === "RAISE #315174");
+console.log("raise transcript:", raise);
+check(raise.some((l) => /^TIER RESETS · [\d.,KM]+ RF( OF)?$/.test(l)) && raise.includes("UPGRADES NOT REFUNDED"), "raise: CONFIRM shows TIER RESETS · N RF OF UPGRADES NOT REFUNDED");
+await page.screenshot({ path: resolve(OUT, "demo-confirm-raise.png") });
+// A fresh demo (the mock resets on load) for the Wake.
+await page.goto(`${BASE}/?p=/demo`);
+await waitForText(page, (t) => t.includes("G1 T2"));
+
+// 10. WAKE the sleeping Genesis #929: the real 100,000 RF activation, dry-run on chain from its owner.
+await pickPet(4);
+await waitForText(page, (t) => t.includes("ASLEEP"));
+check(await careTo("WAKE #929"), "wake: CARE row WAKE #929");
+await okBtn();
+const wake = await waitForText(page, (t) => t[0] === "WAKE #929");
+console.log("wake transcript:", wake);
+check(wake.includes("COST 100,000 RF"), "wake: COST 100,000 RF");
+check(wake.includes("BURN 50,000 REW 50,000"), "wake: BURN 50,000");
+check(wake.some((l) => /^BREAK-EVEN 6\.[23] WK$/.test(l)), `wake: break-even ~6.3 WK (${wake.find((l) => l.startsWith("BREAK-EVEN"))})`);
+check(wake.includes("SELECTED NO"), "wake: paid CONFIRM opens on NO");
+await page.screenshot({ path: resolve(OUT, "demo-confirm-wake.png") });
+await right(); // YES
+await okBtn();
+const dry = page.getByTestId("demo-dry-run");
+let dryText = "";
+const dryStart = Date.now();
+while (Date.now() - dryStart < 90_000) {
+  dryText = (await dry.textContent()) ?? "";
+  if (/DRY-RUN OK|WOULD REVERT|RPC UNAVAILABLE/.test(dryText)) break;
+  await page.waitForTimeout(250);
+}
+console.log("wake dry-run:", dryText);
+check(/^DRY-RUN OK · GAS [\d,]+ · NOT SENT \(DEMO\) · Woke Genesis #929/.test(dryText), `wake: DRY-RUN OK on chain (${dryText.slice(0, 90)})`);
+await page.screenshot({ path: resolve(OUT, "demo-wake.png") });
 
 await browser.close();
 if (failures.length > 0) {

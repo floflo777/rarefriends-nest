@@ -118,3 +118,25 @@ export function step(state: MachineState, input: Input, ctx: MachineContext): [M
   const hatch = ctx.care.find((e) => e.kind === "hatch");
   return [openConfirm("hatch", -1, hatch !== undefined && hatch.enabled && !ctx.readOnly, true), null];
 }
+
+/**
+ * Keeps the CARE cursor (and an open CONFIRM's way back) on the same action kind when the
+ * menu is rebuilt in another order: a Feed that turns TINY drops to the end of the list, and
+ * the row under the cursor must not silently become a different action. BACK stays BACK.
+ */
+export function remapCare(state: MachineState, prev: readonly CareEntry[], next: readonly CareEntry[]): MachineState {
+  const indexOf = (kind: StewardActionKind): number => next.findIndex((e) => e.kind === kind);
+  if (state.screen === "CARE" && state.focused) {
+    if (state.cursor >= prev.length) return state.cursor === next.length ? state : { ...state, cursor: next.length };
+    const kind = prev[state.cursor]?.kind;
+    const i = kind === undefined ? -1 : indexOf(kind);
+    const cursor = i >= 0 ? i : Math.min(state.cursor, next.length);
+    return cursor === state.cursor ? state : { ...state, cursor };
+  }
+  if (state.screen === "CONFIRM" && state.confirm && state.confirm.careIndex >= 0) {
+    const i = indexOf(state.confirm.kind);
+    const careIndex = i >= 0 ? i : Math.min(state.confirm.careIndex, next.length);
+    return careIndex === state.confirm.careIndex ? state : { ...state, confirm: { ...state.confirm, careIndex } };
+  }
+  return state;
+}

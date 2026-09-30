@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import type { Address } from "viem";
 import { liveSource, nestClient, useDataSource } from "../data/context.jsx";
 import { Device } from "../device/Device.jsx";
+import { deepLink } from "../deepLink.js";
 import { shortAddress } from "../model/format.js";
 import { createChainActions } from "../wallet/actions.js";
 import { useWallet } from "../wallet/useWallet.jsx";
@@ -50,13 +51,19 @@ function Landing() {
         <p className="tagline">A handheld pet whose body is your Rare Friend's real wallet.</p>
       </header>
 
+      <div className="actions">
+        <Link className="button primary" to={deepLink("/demo")}>
+          Try the demo (no wallet)
+        </Link>
+      </div>
+
       <Device
         source={source}
         mode="visitor"
         target={{ kind: "friend", collection: SHOWCASE_FRIEND.collection, tokenId: SHOWCASE_FRIEND.tokenId }}
         footer={
           <p className="small showcase-note">
-            Friend #1969, read live from Robinhood Chain. No wallet needed. <Link to="/pet/gen/1969">Open it</Link>
+            Friend #1969, read live from Robinhood Chain. No wallet needed. <Link to={deepLink("/pet/gen/1969")}>Open it</Link>
           </p>
         }
       />
@@ -66,11 +73,6 @@ function Landing() {
         stream, and dry-run before your wallet is asked.
       </p>
 
-      <div className="actions">
-        <Link className="button primary" to="/demo">
-          Try the demo (no wallet)
-        </Link>
-      </div>
       <LookupForm />
       <div className="actions">
         <button type="button" className="tertiary" onClick={() => void wallet.connect()} disabled={wallet.connecting}>
@@ -79,7 +81,7 @@ function Landing() {
       </div>
       {wallet.error && <p className="error">{wallet.error}</p>}
       <p className="small">
-        <Link to="/ledger">Ledger</Link> · <a href={GITHUB_URL}>GitHub</a>
+        <Link to={deepLink("/ledger")}>Ledger</Link> · <a href={GITHUB_URL}>GitHub</a>
       </p>
     </main>
   );
@@ -113,7 +115,7 @@ function Connected({ address }: { address: Address }) {
             <button type="button" onClick={wallet.disconnect}>
               Disconnect
             </button>
-            <Link to="/ledger">Ledger</Link>
+            <Link to={deepLink("/ledger")}>Ledger</Link>
           </nav>
         }
       />

@@ -57,11 +57,16 @@ export function phaseAfterDryRun(results: readonly DryRunResult[]): RunPhase {
  *   YES -> simulating -> DRY-RUN OK · GAS N · NOT SENT (DEMO)  -> mutation applied
  *                     -> WOULD REVERT · <decoded reason>       -> no mutation
  *                     -> RPC UNAVAILABLE · LOCAL SIM            -> mutation applied
+ *     (state only simulated) LOCAL SIM · STATE IS SIMULATED       -> mutation applied, no RPC call
+ *
+ * The last case covers actions whose precondition exists only in the mock (a Withdraw of
+ * savings a simulated Feed created, a Train after a simulated Raise): the real chain would
+ * refuse them, which says nothing about the action, so the demo does not ask it.
  *
  * Wallet mode above is untouched; the Device shows these lines in its SIMULATED toast.
  */
 
-export type DemoVerdict = { kind: "ok"; gas: bigint } | { kind: "revert"; reason: string } | { kind: "unavailable"; reason: string };
+export type DemoVerdict = { kind: "ok"; gas: bigint } | { kind: "revert"; reason: string } | { kind: "unavailable"; reason: string } | { kind: "simulated" };
 
 export type DemoPhase = { phase: "simulating"; from: Address } | { phase: "done"; verdict: DemoVerdict; line: string; applied: boolean };
 
@@ -72,6 +77,8 @@ export interface DemoRunDeps {
   owner: Address;
   /** Applies the action to the mock and returns its one-line description. */
   simulate: (action: StewardAction) => string;
+  /** True when the action's precondition exists only in the simulated state: no dry-run then. */
+  isSimulated?: (action: StewardAction) => boolean;
   onPhase?: (phase: DemoPhase) => void;
 }
 
@@ -83,6 +90,7 @@ export interface DemoRunResult {
 }
 
 export const DEMO_NOT_SENT = "NOT SENT (DEMO)";
+export const DEMO_STATE_SIMULATED = "LOCAL SIM · STATE IS SIMULATED";
 
 /** The address the dry-run runs from: the real owner of the targeted Friend, else the household owner. */
 export function demoSender(action: StewardAction, owner: Address): Address {
@@ -115,11 +123,19 @@ export function demoLine(verdict: DemoVerdict, mutation: string | null): string 
       return `WOULD REVERT · ${revertName(verdict.reason)} · ${DEMO_NOT_SENT}`;
     case "unavailable":
       return `RPC UNAVAILABLE · LOCAL SIM${mutation ? ` · ${mutation}` : ""}`;
+    case "simulated":
+      return `${DEMO_STATE_SIMULATED}${mutation ? ` · ${mutation}` : ""}`;
   }
 }
 
 /** Dry-runs on chain, then applies the local mutation unless the chain says the action would revert. */
 export async function runDemo(action: StewardAction, deps: DemoRunDeps): Promise<DemoRunResult> {
+  if (deps.isSimulated?.(action) === true) {
+    const verdict: DemoVerdict = { kind: "simulated" };
+    const line = demoLine(verdict, deps.simulate(action));
+    deps.onPhase?.({ phase: "done", verdict, line, applied: true });
+    return { verdict, line, applied: true };
+  }
   const from = demoSender(action, deps.owner);
   deps.onPhase?.({ phase: "simulating", from });
   let verdict: DemoVerdict;

@@ -2,6 +2,7 @@ import { Link, useParams } from "react-router-dom";
 import { useDataSource } from "../data/context.jsx";
 import { collectionFromSlug, parseTokenId } from "../data/source.js";
 import { Device } from "../device/Device.jsx";
+import { deepLink } from "../deepLink.js";
 
 export function PetPage() {
   const { collection: slug, tokenId: rawId } = useParams();
@@ -25,7 +26,7 @@ export function PetPage() {
         footer={
           <nav className="under">
             <Link to="/">Home</Link>
-            <Link to={`/card/${slug}/${rawId}`}>Pet card</Link>
+            <Link to={deepLink(`/card/${slug}/${rawId}`)}>Pet card</Link>
           </nav>
         }
       />

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { planHousehold, upgradeCostRf, weightFor } from "@nest/core";
+import { planHousehold, upgradeCostRf, upgradesPaidRf, weightFor } from "@nest/core";
 import { createMockSource, DEMO_OWNER } from "../data/mock.js";
 import { initialState } from "../screens/machine.js";
 import { renderScreen, type ScreenModel } from "../screens/render.js";
 import { compact } from "./format.js";
-import { careLabel, careMenu, confirmHeader, confirmRationale, gateMenu, hatchOf, savedRfOf, squeezeLabel } from "./care.js";
+import { careLabel, careMenu, confirmHeader, confirmRationale, gateMenu, hatchOf, notRefundedLines, savedRfOf, squeezeLabel } from "./care.js";
 
 async function fixtures() {
   const mock = createMockSource();
@@ -128,5 +128,25 @@ describe("CARE menu from the Steward plan", () => {
     expect(text.some((l) => l.endsWith(".."))).toBe(false);
     expect(text).toContain("[ YES ]");
     expect(text).toContain("SELECTED YES");
+  });
+
+  it("a Raise of a trained Friend names the RF of upgrades that is not refunded, on CONFIRM too", async () => {
+    const { household, plan } = await fixtures();
+    const pup = household.friends.find((f) => f.tokenId === 315174n)!; // Gen-4, tier 1
+    const raise = plan.find((a) => a.kind === "raise" && a.friend?.tokenId === 315174n)!;
+    const paid = compact(upgradesPaidRf(pup.generation, pup.position.tier));
+    expect(raise.rationale).toContain("not refunded");
+    const lines = notRefundedLines(raise)!;
+    expect(lines.join(" ")).toBe(`TIER RESETS · ${paid} RF OF UPGRADES NOT REFUNDED`);
+    expect(lines.every((l) => l.length <= 23)).toBe(true);
+    expect(notRefundedLines(plan.find((a) => a.kind === "train")!)).toBeNull();
+    const model: ScreenModel = {
+      mode: "demo", now: 0, reducedMotion: true, protocol: null, household, snapshot: null, pet: pup, sprite: null,
+      care: gateMenu(careMenu(plan, pup), null, false), hatch: null, status: {}, loading: false, run: null, memory: {}, scene: null,
+    };
+    const confirm = { screen: "CONFIRM" as const, focused: false, cursor: 0, confirm: { kind: "raise" as const, careIndex: 0, choice: "no" as const, enabled: true } };
+    const text = renderScreen(confirm, model).text;
+    expect(text).toContain(`TIER RESETS · ${paid} RF OF`);
+    expect(text).toContain("UPGRADES NOT REFUNDED");
   });
 });

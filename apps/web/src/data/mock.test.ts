@@ -175,4 +175,23 @@ describe("mock snapshot and simulation", () => {
     expect(again.friends).toHaveLength(mock.fixture.friends.length);
     expect(again.rfBalance).toBe(mock.fixture.rfBalance);
   });
+
+  it("carries a real sleeping Genesis, #929: WAKE costs 100,000 RF from its own owner, burns 50,000, breaks even in about 6.3 weeks", async () => {
+    const mock = createMockSource({ now: clock().now });
+    const genesis = mock.fixture.friends.find((x) => x.collection === "Genesis" && x.tokenId === 929n)!;
+    expect(genesis.position.active).toBe(false);
+    expect(genesis.owner.toLowerCase()).toBe("0x113941782d3eb0b80a6611a3b1ddfec16e82bd6e");
+    const [household, state] = await Promise.all([mock.household(DEMO_OWNER), mock.protocolState()]);
+    const wake = planHousehold(household, state).find((a) => a.kind === "wake")!;
+    expect(wake.friend?.tokenId).toBe(929n);
+    expect(wake.costRf).toBe(100_000);
+    expect(wake.burnRf).toBe(50_000);
+    expect(wake.breakEvenWeeks!).toBeGreaterThan(5.5);
+    expect(wake.breakEvenWeeks!).toBeLessThan(7);
+    expect(wake.txs).toHaveLength(2); // approve + activate
+    expect(mock.simulate(wake)).toBe("Woke Genesis #929");
+    const after = await mock.household(DEMO_OWNER);
+    expect(after.friends.find((x) => x.tokenId === 929n && x.collection === "Genesis")!.position.active).toBe(true);
+    expect(after.rfBalance).toBe(household.rfBalance); // its owner paid, not the household
+  });
 });

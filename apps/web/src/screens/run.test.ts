@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { encodeErrorResult } from "viem";
 import { ADDRESSES, REVERT_ABI, planHousehold, type NestClient } from "@nest/core";
 import { DEMO_OWNER, createMockSource } from "../data/mock.js";
-import { demoLine, demoSender, demoVerdict, runDemo, type DemoPhase } from "./run.js";
+import { DEMO_STATE_SIMULATED, demoLine, demoSender, demoVerdict, runDemo, type DemoPhase } from "./run.js";
 
 /** A frozen clock: no demo-time accrual between the Feed and the assertions. */
 const FROZEN = () => Date.UTC(2026, 9, 1, 12);
@@ -86,5 +86,26 @@ describe("demo run: real dry-run, simulated mutation", () => {
     expect(demoVerdict([{ ok: false, revertReason: "HTTP request failed." }]).kind).toBe("unavailable");
     expect(demoLine({ kind: "revert", reason: "NotTokenOwner()" }, null)).toBe("WOULD REVERT · NotTokenOwner · NOT SENT (DEMO)");
     expect(demoLine({ kind: "unavailable", reason: "x" }, "Fed #1")).toBe("RPC UNAVAILABLE · LOCAL SIM · Fed #1");
+  });
+
+  it("state that exists only in the simulation is not dry-run: LOCAL SIM · STATE IS SIMULATED", async () => {
+    const { mock, feed } = await feedOf();
+    const client = okClient();
+    const deps = { client, owner: DEMO_OWNER, simulate: (a: Parameters<typeof mock.simulate>[0]) => mock.simulate(a), isSimulated: (a: Parameters<typeof mock.isSimulated>[0]) => mock.isSimulated(a) };
+    await runDemo(feed, deps); // untouched real state: dry-run on chain
+    expect(client.simulateCalls).toHaveBeenCalledTimes(1);
+    const plan = planHousehold(await mock.household(DEMO_OWNER), await mock.protocolState());
+    const withdraw = plan.find((a) => a.kind === "withdraw" && a.friend?.tokenId === 1969n)!;
+    const train = plan.find((a) => a.kind === "train" && a.friend?.tokenId === 1969n)!;
+    expect(mock.isSimulated(withdraw)).toBe(true); // the savings came from the simulated Feed
+    expect(mock.isSimulated(train)).toBe(false); // tier and generation are still the chain's
+    const r = await runDemo(withdraw, deps);
+    expect(client.simulateCalls).toHaveBeenCalledTimes(1);
+    expect(r.verdict.kind).toBe("simulated");
+    expect(r.applied).toBe(true);
+    expect(r.line).toMatch(new RegExp(`^${DEMO_STATE_SIMULATED} · Withdrew`));
+    mock.simulate(train);
+    const again = planHousehold(await mock.household(DEMO_OWNER), await mock.protocolState());
+    expect(mock.isSimulated(again.find((a) => a.kind === "train" && a.friend?.tokenId === 1969n)!)).toBe(true);
   });
 });

@@ -125,7 +125,7 @@ describe("demo action flow", () => {
     expect(lcdText().some((l) => l.includes(`EGG #${egg}`) && l.includes("G4 100 RF"))).toBe(true);
     const ok = screen.getByRole("button", { name: "OK" });
     fireEvent.click(ok); // focus the list
-    for (let i = 0; i < 4; i++) fireEvent.keyDown(window, { key: "ArrowRight" }); // 4 Friends, then the egg
+    for (let i = 0; i < mock.fixture.friends.length; i++) fireEvent.keyDown(window, { key: "ArrowRight" }); // every Friend, then the egg
     fireEvent.click(ok); // egg row -> CONFIRM hatch
     expect(lcdText()).toContain("COST 100 RF");
     fireEvent.keyDown(window, { key: "ArrowRight" }); // a paid CONFIRM defaults to NO: move to YES

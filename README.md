@@ -13,8 +13,11 @@ Nest is a handheld virtual pet for [Rare Friends](https://rarefriends.com) on Ro
 
 Live: https://floflo777.github.io/rarefriends-nest/
 
-- **Visitor mode, no wallet:** `/pet/gen/1969` shows any Friend read-only.
-- **Demo, no gas:** `/demo` is a simulated household built from a real snapshot; every action is labelled SIMULATED.
+- **Visitor mode, no wallet:** https://floflo777.github.io/rarefriends-nest/?p=/pet/gen/1969 shows any Friend read-only.
+- **Demo, no gas:** https://floflo777.github.io/rarefriends-nest/?p=/demo is a simulated household built from a real snapshot; every action is labelled SIMULATED.
+- **Ledger:** https://floflo777.github.io/rarefriends-nest/?p=/ledger · **Pet card:** https://floflo777.github.io/rarefriends-nest/?p=/card/gen/1969
+
+Deep links use the `/?p=/route` form: GitHub Pages answers `/pet/gen/1969` from its 404 page (the app still loads, with HTTP 404), while `/?p=/pet/gen/1969` is the site root (HTTP 200) and the app restores the route at boot.
 - **Your household:** connect an injected wallet on Robinhood Chain (4663) holding a hardwired Generations NFT or a Genesis.
 - **Agents and judges:** `npx tsx apps/cli/src/nest.ts state gen 1969`, `… state genesis 597`, `… meta gen 1969` (the NFT's own tokenURI), `… household 0x…`, `… plan 0x… --dry-run`, `… census` (after `npm ci`).
 

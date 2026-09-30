@@ -4,7 +4,7 @@
  * planner; in demo mode `onSimulate` applies them to the mock, in wallet mode `chain`
  * dry-runs then signs them, in visitor mode nothing can run.
  */
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import type { Hex } from "viem";
 import { EXPLORER_URL, type CareEvent, type Eligibility, type StewardAction } from "@nest/core";
 import { friendKey, type NestDataSource } from "../data/source.js";
@@ -13,7 +13,7 @@ import { careMenu, gateMenu, hatchOf, isPaid, planFor } from "../model/care.js";
 import { shortHash } from "../model/format.js";
 import { identityOf, petState, previousSavings, recentCareEvents, rememberSavings, type PetMemory } from "../model/pet.js";
 import { sceneSource, type TokenScene } from "../model/scene.js";
-import { initialState, step, type Input, type MachineContext, type MachineState, type Screen } from "../screens/machine.js";
+import { initialState, remapCare, step, type CareEntry, type Input, type MachineContext, type MachineState, type Screen } from "../screens/machine.js";
 import { isReactionOver, reactionEndsAt, screenAfterReaction, startReaction, type Reaction, type ReactionKind } from "../screens/reaction.js";
 import { renderScreen, sceneCaption, type DeviceMode, type SceneState, type ScreenModel } from "../screens/render.js";
 import { phaseAfterDryRun, runInput, type RunState } from "../screens/run.js";
@@ -48,10 +48,18 @@ interface DeviceState {
   pending: { kind: StewardAction["kind"]; seq: number } | null;
 }
 
-type DeviceEvent = { type: "input"; input: Input; ctx: MachineContext } | { type: "ran" } | { type: "goto"; screen: Screen };
+type DeviceEvent =
+  | { type: "input"; input: Input; ctx: MachineContext }
+  | { type: "ran" }
+  | { type: "goto"; screen: Screen }
+  | { type: "recare"; prev: readonly CareEntry[]; next: readonly CareEntry[] };
 
 function reducer(s: DeviceState, e: DeviceEvent): DeviceState {
   if (e.type === "ran") return { ...s, pending: null };
+  if (e.type === "recare") {
+    const machine = remapCare(s.machine, e.prev, e.next);
+    return machine === s.machine ? s : { ...s, machine };
+  }
   if (e.type === "goto") return { ...s, machine: initialState(e.screen) };
   const [machine, effect] = step(s.machine, e.input, e.ctx);
   return {
@@ -131,6 +139,14 @@ export function Device({ source, mode, target, initialScreen = "PET", onSimulate
     }),
     [care, friends.length, data.household, mode],
   );
+
+  // The CARE list is rebuilt on every refresh; keep the cursor on the action kind it was on.
+  const prevCare = useRef<readonly CareEntry[]>(ctx.care);
+  useLayoutEffect(() => {
+    const prev = prevCare.current;
+    prevCare.current = ctx.care;
+    if (prev !== ctx.care && prev.map((e) => e.kind).join() !== ctx.care.map((e) => e.kind).join()) dispatch({ type: "recare", prev, next: ctx.care });
+  }, [ctx.care]);
 
   // Ownership gate: re-checked at a fresh block whenever the pet or the data changes.
   useEffect(() => {

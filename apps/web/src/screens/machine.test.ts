@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initialState, RING, step, type Input, type MachineContext, type MachineState } from "./machine.js";
+import { initialState, remapCare, RING, step, type Input, type MachineContext, type MachineState } from "./machine.js";
 
 const ctx: MachineContext = {
   care: [
@@ -118,5 +118,22 @@ describe("screen state machine", () => {
     const noHatch: MachineContext = { ...ctx, care: [{ kind: "claim", enabled: true, paid: false }] };
     const egg = run(initialState("HOUSEHOLD"), ["ok", "right", "right", "right", "ok"], noHatch);
     expect(egg.state.confirm).toMatchObject({ kind: "hatch", enabled: false, choice: "no" });
+  });
+
+  it("keeps the CARE cursor and CONFIRM's way back on the same action kind after a reorder", () => {
+    const prev = ctx.care;
+    // Feed turned TINY: it drops to the end of the list.
+    const next = [prev[1]!, prev[2]!, prev[3]!, prev[0]!];
+    const onTrain: MachineState = { screen: "CARE", focused: true, cursor: 1, confirm: null };
+    expect(remapCare(onTrain, prev, next).cursor).toBe(0);
+    const onBack: MachineState = { screen: "CARE", focused: true, cursor: prev.length, confirm: null };
+    expect(remapCare(onBack, prev, next.slice(0, 3)).cursor).toBe(3);
+    const confirm: MachineState = { screen: "CONFIRM", focused: false, cursor: 0, confirm: { kind: "claim", careIndex: 0, choice: "yes", enabled: true } };
+    const back = step(remapCare(confirm, prev, next), "ok", { ...ctx, care: next });
+    expect(back[0].confirm).toBeNull();
+    // Choice YES emits the action; its way back (had it been NO) points at Feed's new row.
+    expect(remapCare(confirm, prev, next).confirm?.careIndex).toBe(3);
+    const unchanged: MachineState = { screen: "PET", focused: false, cursor: 0, confirm: null };
+    expect(remapCare(unchanged, prev, next)).toBe(unchanged);
   });
 });

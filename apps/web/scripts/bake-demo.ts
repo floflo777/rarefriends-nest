@@ -35,6 +35,9 @@ export const DEMO_HOUSEHOLD_OWNER: Address = "0x3d35a856cb96f9770c986841f4fdb7e1
 export const EXTRA_PETS: readonly (FriendRef & { expectedOwner?: Address })[] = [
   { collection: "Generations", tokenId: 1969n, expectedOwner: "0x30Df16cd7D612C5B25bEb0331486b127a42Ac371" },
   { collection: "Genesis", tokenId: 597n },
+  // A sleeping Genesis, so the demo shows WAKE (100,000 RF, the 6.3-week break-even). Its owner holds
+  // enough RF for the activation, so the on-chain dry-run (approve + activate from that owner) passes.
+  { collection: "Genesis", tokenId: 929n, expectedOwner: "0x113941782d3eb0b80a6611a3b1ddfec16e82bd6e" },
 ];
 export const MAX_IN_FLIGHT = 20;
 /** Leaderboard rows kept from the indexer snapshot (the RANK screen shows six plus the household). */
@@ -174,6 +177,7 @@ async function main(): Promise<void> {
     const f = extras.find((x) => x.collection === pet.collection && x.tokenId === pet.tokenId);
     if (!f) throw new Error(`${pet.collection} #${pet.tokenId} was not read`);
     if (pet.expectedOwner && !isAddressEqual(f.owner, pet.expectedOwner)) log(`warning: ${pet.collection} #${pet.tokenId} is owned by ${f.owner}, expected ${pet.expectedOwner}`);
+    log(`extra ${pet.collection} #${pet.tokenId}: owner ${f.owner}, ${f.position.active ? "active" : "ASLEEP"}, gen ${f.generation} tier ${f.position.tier}`);
   }
 
   // Order: the Gen-1 showcase first, then the household's own Friends by id, then the other extras.

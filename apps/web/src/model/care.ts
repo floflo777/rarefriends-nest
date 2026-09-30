@@ -7,7 +7,7 @@
  */
 import { decodeFunctionData } from "viem";
 import type { Eligibility, Friend, Household, ProtocolState, StewardAction } from "@nest/core";
-import { ERC20_ABI, planHousehold, weiToRf } from "@nest/core";
+import { ERC20_ABI, planHousehold, upgradesPaidRf, weiToRf } from "@nest/core";
 import { sameFriend } from "../data/source.js";
 import { compact } from "./format.js";
 
@@ -164,4 +164,26 @@ export function confirmHeader(action: StewardAction): [string, string] {
 export function confirmRationale(action: StewardAction): string {
   if (isNegligible(action)) return "Not worth gas yet: rewards below the gas to claim them.";
   return firstSentence(action.rationale);
+}
+
+/**
+ * Raise of a trained Friend: the tier resets and the RF paid in upgrades is lost. Core's
+ * rationale says so in its second sentence, which `confirmRationale` drops, so CONFIRM prints
+ * the figure (core `upgradesPaidRf`) on two rows of at most `cols`:
+ * "TIER RESETS · 50 RF OF" / "UPGRADES NOT REFUNDED". Null for anything else.
+ */
+export function notRefundedLines(action: StewardAction, cols = 23): [string, string] | null {
+  const f = action.friend;
+  if (action.kind !== "raise" || !f || f.collection !== "Generations" || f.position.tier <= 0) return null;
+  const paid = compact(upgradesPaidRf(f.generation, f.position.tier));
+  const first = `TIER RESETS · ${paid} RF OF`;
+  return [first.length <= cols ? first : `TIER RESETS · ${paid} RF`, "UPGRADES NOT REFUNDED"];
+}
+
+/** The conclusion of core's rationale ("cheap for what it adds") when it fits one row, else null. */
+export function shortConclusion(action: StewardAction, cols = 23): string | null {
+  const m = /:\s*(.+?)[.!]?$/.exec(firstSentence(action.rationale));
+  const clause = m?.[1]?.replace(/\s*\([^)]*\)/g, "").trim();
+  if (!clause || clause.length > cols) return null;
+  return clause.charAt(0).toUpperCase() + clause.slice(1);
 }

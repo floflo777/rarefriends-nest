@@ -5,7 +5,7 @@ import { careMenu, gateMenu, hatchOf } from "../model/care.js";
 import { compact } from "../model/format.js";
 import { initialState } from "./machine.js";
 import { startReaction } from "./reaction.js";
-import { renderScreen, type ScreenModel } from "./render.js";
+import { growthScale, renderScreen, type ScreenModel } from "./render.js";
 
 async function fixtures() {
   const mock = createMockSource();
@@ -244,5 +244,30 @@ describe("screens", () => {
     expect(text).toContain("GENESIS");
     expect(text).toContain(`GENESIS T${genesis.position.tier}`);
     expect(text.some((l) => ["SKELETON", "MASK", "FAMILY", "CELLULAR", "ASYMMETRY", "HOVERER", "COLOSSUS", "SPARKLING", "HOLLOW"].includes(l))).toBe(false);
+  });
+
+  it("PET grows the sprite with the generation and draws land as wide as the band", async () => {
+    const { mock, household, base } = await fixtures();
+    expect([6, 5, 4, 3, 2, 1].map((generation) => growthScale({ collection: "Generations", generation }))).toEqual([1, 2, 2, 2, 3, 3]);
+    expect(growthScale({ collection: "Genesis", generation: 0 })).toBe(3);
+    const shot = async (tokenId: bigint, collection: "Generations" | "Genesis" = "Generations") => {
+      const pet = household.friends.find((f) => f.tokenId === tokenId && f.collection === collection)!;
+      const img = renderScreen(initialState("PET"), { ...base, pet, sprite: await mock.sprite(pet) });
+      let lit = 0;
+      for (let y = 8; y < 40; y++) for (let x = 0; x < 39; x++) lit += img.pixels[y * 96 + x] ? 1 : 0;
+      return { text: img.text, lit };
+    };
+    const gen1 = await shot(1969n);
+    const gen4 = await shot(315174n);
+    const genesis = await shot(929n, "Genesis");
+    expect(gen1.text).toContain("SPRITE X3");
+    expect(gen4.text).toContain("SPRITE X2");
+    // A Genesis portrait arrives doubled to 16x16 (live.ts portraitToFrame): 3x does not fit the
+    // 32 px box, so it is fitted down to x2, i.e. 32 px, the largest pet on the panel.
+    expect(genesis.text).toContain("SPRITE X2");
+    expect(genesis.lit).toBeGreaterThan(0);
+    expect(gen1.text).toContain("LAND 6/6");
+    expect(gen4.text).toContain("LAND 3/6");
+    expect(gen1.lit).toBeGreaterThan(gen4.lit);
   });
 });
