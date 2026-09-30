@@ -2,6 +2,8 @@
 
 **Your Rare Friend's wallet is the pet.**
 
+![Nest](docs/media/nest.gif)
+
 Nest is a handheld virtual pet for [Rare Friends](https://rarefriends.com) on Robinhood Chain. The pet is your Generations (or Genesis) NFT. Its body is the NFT's real ERC-6551 wallet. Its hunger is the rewards it has not claimed. Feeding it is `claim()`. Training it is `upgrade()`. Moving it to a bigger territory is `promote()`. Hatching an egg is `hardwire()` at the generation your balance selects, 1 RF for Gen-6 up to 100,000 RF for Gen-1 (Save parks RF in a pet's wallet to hatch a cheaper pup on purpose; Withdraw takes it back). Every paid care action is a real Rare Friends protocol action, 50% burned and 50% streamed to every active Friend, exactly as the protocol does it. Nest deploys no contract, holds no key, and simulates nothing it reports.
 
 - Design: [docs/design.md](docs/design.md)

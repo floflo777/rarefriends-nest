@@ -1,3 +1,5 @@
+![Nest: Mismir, a Friend hatched through Nest on mainnet, then the Ledger (VIA NEST) and a simulated feed in the demo](https://raw.githubusercontent.com/floflo777/rarefriends-nest/main/docs/media/nest.gif)
+
 **Project name**
 Nest
 

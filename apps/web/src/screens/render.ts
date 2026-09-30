@@ -459,7 +459,7 @@ function renderLedger(p: Painter, m: ScreenModel): void {
   if (s) {
     const viaNest = s.totals.viaNest;
     const census: [string, string][] = [
-      ["VIA NEST", viaNest ? `${compact(Math.round(viaNest.burnedRf))} RF` : "0 RF"],
+      ["VIA NEST", viaNest ? `${compact(viaNest.burnedRf)} RF` : "0 RF"],
       ["HARDWIRED", grouped(s.hardwired.total)],
       ["WALLETS", grouped(s.hardwired.wallets)],
       ["GENESIS ON/OFF", `${grouped(s.genesis.activated)}/${grouped(s.genesis.inactive)}`],
