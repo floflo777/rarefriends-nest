@@ -1,0 +1,15 @@
+{
+  "name": "rarefriends-nest",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Nest: a handheld virtual pet where your Rare Friend's wallet is the pet.",
+  "license": "Apache-2.0",
+  "workspaces": ["packages/*", "apps/*", "tools/*"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "npm run build -w @nest/core && npm run build -w @nest/cli && npm run build -w @nest/web",
+    "test": "npm run test -ws --if-present",
+    "typecheck": "npm run typecheck -ws --if-present",
+    "lint": "npm run lint -ws --if-present"
+  }
+}

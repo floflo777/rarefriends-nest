@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.friendsdk/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+apps/web/public/data/*.tmp
