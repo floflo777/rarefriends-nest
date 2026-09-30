@@ -16,17 +16,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
+        with:
+          node-version: 22
+          cache: npm
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
-      - run: NEST_BASE=/rarefriends-nest/ npm run build -w @nest/web
+      - run: npm run build -w @nest/web
+        env:
+          NEST_BASE: /rarefriends-nest/
       - uses: actions/upload-pages-artifact@v3
-        with: { path: apps/web/dist }
+        with:
+          path: apps/web/dist
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    environment: { name: github-pages, url: ${{ steps.deployment.outputs.page_url }} }
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
