@@ -11,10 +11,12 @@ Nest is a handheld virtual pet for [Rare Friends](https://rarefriends.com) on Ro
 
 ## Try it
 
+Live: https://floflo777.github.io/rarefriends-nest/
+
 - **Visitor mode, no wallet:** `/pet/gen/1969` shows any Friend read-only.
 - **Demo, no gas:** `/demo` is a simulated household built from a real snapshot; every action is labelled SIMULATED.
 - **Your household:** connect an injected wallet on Robinhood Chain (4663) holding a hardwired Generations NFT or a Genesis.
-- **Agents and judges:** `npx nest state gen 1969`, `npx nest household 0x…`, `npx nest plan 0x… --dry-run`, `npx nest census`.
+- **Agents and judges:** `npx tsx apps/cli/src/nest.ts state gen 1969`, `… household 0x…`, `… plan 0x… --dry-run`, `… census` (after `npm ci`).
 
 ## Run
 

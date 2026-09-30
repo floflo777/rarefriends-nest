@@ -17,10 +17,11 @@ It uses only the existing protocol: Generations, Genesis, ActivationManager, the
 https://github.com/floflo777/rarefriends-nest · TypeScript, viem, React, Vite PWA. FriendSDK not used: Nest needs signed protocol transactions, which the SDK sandbox forbids by design; its ownership-gate rule (fresh-block `ownerOf` + `generation ≥ 1`) is reimplemented.
 
 **Playable preview / demo**
-- Handheld: (GitHub Pages URL)
-- Visitor mode, no wallet: (URL)/pet/gen/1969 — any Friend by id, read-only
-- Demo, no gas: (URL)/demo — a simulated household built from a real snapshot, every action labelled SIMULATED
-- Agents: `npx nest state gen 1969`, `npx nest plan <address> --dry-run`, `npx nest census`
+- Handheld: https://floflo777.github.io/rarefriends-nest/
+- Visitor mode, no wallet: https://floflo777.github.io/rarefriends-nest/pet/gen/1969 — any Friend by id, read-only (also /pet/genesis/597)
+- Demo, no gas: https://floflo777.github.io/rarefriends-nest/demo — a simulated household built from real Friends, every action labelled SIMULATED
+- Ledger: https://floflo777.github.io/rarefriends-nest/ledger
+- Agents: `git clone https://github.com/floflo777/rarefriends-nest && npm ci && npx tsx apps/cli/src/nest.ts state gen 1969` (also `plan <address> --dry-run`, `census`)
 Wallet requirements for real care: an injected wallet (MetaMask, Rabby) on Robinhood Chain (4663) owning a hardwired Generations NFT or a Genesis; ETH for gas; RF for paid actions.
 
 **How to use it**
