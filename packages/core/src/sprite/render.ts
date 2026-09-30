@@ -3,10 +3,11 @@
  * its dimensions; `renderLcd` composes declarative layers into one, and
  * `lcdToImageData` turns it into RGBA for a canvas `putImageData` in the web app.
  * Every primitive clips to the buffer, so out-of-bounds coordinates are safe.
+ * Text is not drawn here: the handheld's 3x5 font lives in apps/web and draws its glyphs
+ * through `blitPattern`.
  */
 import type { PetFrame } from "../types.js";
 import { frameToRows } from "./decode.js";
-import { GLYPH_ADVANCE, GLYPH_HEIGHT, GLYPH_WIDTH, glyphFor } from "./font5x7.js";
 import { ICONS, ICON_SIZE, type IconName } from "./icons.js";
 
 export interface LcdSize {
@@ -94,56 +95,13 @@ export function blitFrame(buffer: LcdBuffer, frame: PetFrame, x: number, y: numb
   blitRows(buffer, frameToRows(frame), x, y, scale, on);
 }
 
-/** Draws a '#'-pattern bitmap (font glyph or icon) at (x, y). */
-function blitPattern(buffer: LcdBuffer, pattern: readonly string[], x: number, y: number, on = true): void {
+/** Draws a '#'-pattern bitmap (font glyph or icon) at (x, y); any other character is off. */
+export function blitPattern(buffer: LcdBuffer, pattern: readonly string[], x: number, y: number, on = true): void {
   for (let ry = 0; ry < pattern.length; ry++) {
     const line = pattern[ry];
     if (line === undefined) continue;
     for (let rx = 0; rx < line.length; rx++) if (line[rx] === "#") setPixel(buffer, x + rx, y + ry, on);
   }
-}
-
-/** Width in pixels of a line of text (without the trailing gap). */
-export function textWidth5x7(text: string): number {
-  return text.length === 0 ? 0 : text.length * GLYPH_ADVANCE - 1;
-}
-
-export const TEXT_HEIGHT_5X7 = GLYPH_HEIGHT;
-
-/** Draws text at (x, y) with the built-in 5x7 font; returns the x after the last glyph. */
-export function drawText5x7(buffer: LcdBuffer, text: string, x: number, y: number, on = true): number {
-  let cx = x;
-  for (const ch of text) {
-    blitPattern(buffer, glyphFor(ch), cx, y, on);
-    cx += GLYPH_ADVANCE;
-  }
-  return cx;
-}
-
-/** Splits text into lines no wider than maxWidth px, breaking on spaces (hard-cutting long words). */
-export function wrapText5x7(text: string, maxWidth: number): string[] {
-  const maxChars = Math.max(1, Math.floor((maxWidth + 1) / GLYPH_ADVANCE));
-  const lines: string[] = [];
-  let current = "";
-  for (const word of text.split(/\s+/).filter((w) => w.length > 0)) {
-    let w = word;
-    while (w.length > maxChars) {
-      if (current.length > 0) {
-        lines.push(current);
-        current = "";
-      }
-      lines.push(w.slice(0, maxChars));
-      w = w.slice(maxChars);
-    }
-    const candidate = current.length === 0 ? w : `${current} ${w}`;
-    if (candidate.length <= maxChars) current = candidate;
-    else {
-      lines.push(current);
-      current = w;
-    }
-  }
-  if (current.length > 0) lines.push(current);
-  return lines;
 }
 
 /** Outlined gauge filled from the left by fill01 in [0, 1]. */
@@ -165,14 +123,13 @@ export function drawIcon(buffer: LcdBuffer, name: IconName, x: number, y: number
   blitPattern(buffer, ICONS[name], x, y, on);
 }
 
-export { ICON_SIZE, GLYPH_WIDTH, GLYPH_HEIGHT, GLYPH_ADVANCE };
+export { ICON_SIZE };
 
 /** Declarative layers composed in order by renderLcd. */
 export type LcdLayer =
   | { kind: "clear"; on?: boolean }
   | { kind: "frame"; frame: PetFrame; x: number; y: number; scale?: number; on?: boolean }
   | { kind: "rows"; rows: readonly (readonly boolean[])[]; x: number; y: number; scale?: number; on?: boolean }
-  | { kind: "text"; text: string; x: number; y: number; on?: boolean }
   | { kind: "bar"; x: number; y: number; w: number; h: number; fill: number }
   | { kind: "icon"; name: IconName; x: number; y: number; on?: boolean }
   | { kind: "rect"; x: number; y: number; w: number; h: number; filled?: boolean; on?: boolean }
@@ -188,9 +145,6 @@ export function drawLayer(buffer: LcdBuffer, layer: LcdLayer): void {
       return;
     case "rows":
       blitRows(buffer, layer.rows, layer.x, layer.y, layer.scale ?? 1, layer.on ?? true);
-      return;
-    case "text":
-      drawText5x7(buffer, layer.text, layer.x, layer.y, layer.on ?? true);
       return;
     case "bar":
       drawBar(buffer, layer.x, layer.y, layer.w, layer.h, layer.fill);

@@ -10,8 +10,8 @@
  *    selects. The last item is always BACK, which unfocuses.
  *      CARE item      -> CONFIRM
  *      HOUSEHOLD item -> effect select (switch pet) and PET; the egg row -> CONFIRM hatch
- *  - CONFIRM: left/right toggle NO/YES; ok on YES emits the action effect (unless read-only),
- *    ok on NO returns to the focused CARE list.
+ *  - CONFIRM: left/right toggle NO/YES; ok on YES emits the action effect. A disabled item
+ *    (read-only mode, ownership gate) can only go BACK.
  */
 import type { StewardActionKind } from "@nest/core";
 
@@ -20,11 +20,18 @@ export type Input = "left" | "right" | "ok";
 
 export const RING: readonly Screen[] = ["PET", "STATS", "CARE", "HOUSEHOLD", "RANK", "LEDGER"];
 
+export interface CareEntry {
+  kind: StewardActionKind;
+  enabled: boolean;
+}
+
 export interface ConfirmState {
   kind: StewardActionKind;
   /** Index into the care list that opened it, or -1 when opened from the household egg row. */
   careIndex: number;
   choice: "no" | "yes";
+  /** Whether YES can be chosen at all. */
+  enabled: boolean;
 }
 
 export interface MachineState {
@@ -36,8 +43,8 @@ export interface MachineState {
 }
 
 export interface MachineContext {
-  /** Care actions available, in menu order. */
-  careKinds: readonly StewardActionKind[];
+  /** Care actions available, in menu order, with the ownership gate applied. */
+  care: readonly CareEntry[];
   /** Household rows: Friends count (eggs excluded). */
   friendCount: number;
   hasEgg: boolean;
@@ -49,7 +56,7 @@ export type Effect = { type: "action"; kind: StewardActionKind } | { type: "sele
 export const initialState = (screen: Screen = "PET"): MachineState => ({ screen, focused: false, cursor: 0, confirm: null });
 
 function listLength(state: MachineState, ctx: MachineContext): number {
-  if (state.screen === "CARE") return ctx.careKinds.length + 1; // + BACK
+  if (state.screen === "CARE") return ctx.care.length + 1; // + BACK
   if (state.screen === "HOUSEHOLD") return ctx.friendCount + (ctx.hasEgg ? 1 : 0) + 1;
   return 0;
 }
@@ -60,16 +67,20 @@ function ringMove(state: MachineState, dir: 1 | -1): MachineState {
   return { screen: next, focused: false, cursor: 0, confirm: null };
 }
 
+function openConfirm(kind: StewardActionKind, careIndex: number, enabled: boolean): MachineState {
+  return { screen: "CONFIRM", focused: false, cursor: 0, confirm: { kind, careIndex, choice: enabled ? "yes" : "no", enabled } };
+}
+
 export function step(state: MachineState, input: Input, ctx: MachineContext): [MachineState, Effect | null] {
   if (state.screen === "CONFIRM" && state.confirm) {
     const c = state.confirm;
     if (input === "left" || input === "right") {
-      if (ctx.readOnly) return [state, null];
+      if (!c.enabled) return [state, null];
       return [{ ...state, confirm: { ...c, choice: c.choice === "yes" ? "no" : "yes" } }, null];
     }
     const back: MachineState =
       c.careIndex >= 0 ? { screen: "CARE", focused: true, cursor: c.careIndex, confirm: null } : { screen: "HOUSEHOLD", focused: true, cursor: ctx.friendCount, confirm: null };
-    if (c.choice === "yes" && !ctx.readOnly) return [initialState("PET"), { type: "action", kind: c.kind }];
+    if (c.choice === "yes" && c.enabled && !ctx.readOnly) return [initialState("PET"), { type: "action", kind: c.kind }];
     return [back, null];
   }
 
@@ -92,13 +103,14 @@ export function step(state: MachineState, input: Input, ctx: MachineContext): [M
   if (state.cursor >= len - 1) return [{ ...state, focused: false, cursor: 0 }, null]; // BACK
 
   if (state.screen === "CARE") {
-    const kind = ctx.careKinds[state.cursor];
-    if (!kind) return [{ ...state, focused: false, cursor: 0 }, null];
-    return [{ screen: "CONFIRM", focused: false, cursor: 0, confirm: { kind, careIndex: state.cursor, choice: ctx.readOnly ? "no" : "yes" } }, null];
+    const entry = ctx.care[state.cursor];
+    if (!entry) return [{ ...state, focused: false, cursor: 0 }, null];
+    return [openConfirm(entry.kind, state.cursor, entry.enabled && !ctx.readOnly), null];
   }
 
   // HOUSEHOLD
   if (state.cursor < ctx.friendCount) return [initialState("PET"), { type: "select", friendIndex: state.cursor }];
-  // Egg row.
-  return [{ screen: "CONFIRM", focused: false, cursor: 0, confirm: { kind: "hatch", careIndex: -1, choice: ctx.readOnly ? "no" : "yes" } }, null];
+  // Egg row: hatch is a household action, enabled unless read-only (and only when the plan offers it).
+  const hatch = ctx.care.find((e) => e.kind === "hatch");
+  return [openConfirm("hatch", -1, hatch !== undefined && hatch.enabled && !ctx.readOnly), null];
 }

@@ -4,6 +4,7 @@ import { DataSourceProvider } from "../data/context.jsx";
 import { createMockSource, DEMO_OWNER } from "../data/mock.js";
 import { Device } from "../device/Device.jsx";
 
+/** A simulated household: the same planner, vitals and screens as live mode, applied to fixtures. */
 export function DemoPage() {
   const mock = useMemo(() => createMockSource(), []);
   return (
@@ -13,7 +14,7 @@ export function DemoPage() {
           source={mock}
           mode="demo"
           target={{ kind: "household", owner: DEMO_OWNER }}
-          onAction={(action, pet) => mock.simulate(action.kind, action.kind === "hatch" ? null : pet ? { collection: pet.collection, tokenId: pet.tokenId } : null)}
+          onSimulate={(action) => mock.simulate(action)}
           footer={
             <nav className="under">
               <Link to="/">Home</Link>

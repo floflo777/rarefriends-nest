@@ -41,6 +41,8 @@ export interface RpcOptions {
 
 export interface RpcStats {
   requests: number;
+  /** JSON-RPC items sent (a batch of 20 counts 20). */
+  items: number;
   retries: number;
   rateLimited: number;
 }
@@ -58,6 +60,8 @@ export interface ScanOptions {
   maxWindow?: bigint;
   /** A window returning fewer logs than this doubles the next window (default 2,000). */
   sparseThreshold?: number;
+  /** "backward" walks from toBlock down to fromBlock (default "forward"). */
+  direction?: "forward" | "backward";
   label?: string;
 }
 
@@ -149,9 +153,11 @@ export function classifyError(err: unknown): ErrorKind {
   return "fatal";
 }
 
+/** Distinct messages along the cause chain on one line, the node's own details included. */
 export function shortMessage(err: unknown): string {
   const { text } = inspectError(err);
-  return text.split("\n")[0]?.slice(0, 160) ?? String(err);
+  const parts = [...new Set(text.split(" | ").map((p) => p.split("\n")[0]?.trim() ?? "").filter((p) => p.length > 0))];
+  return (parts.join(" | ") || String(err)).slice(0, 240);
 }
 
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -164,7 +170,9 @@ export function backoffDelay(attempt: number, baseMs: number, maxMs: number): nu
 export class Rpc {
   readonly client: Client;
   readonly batchSize: number;
-  readonly stats: RpcStats = { requests: 0, retries: 0, rateLimited: 0 };
+  readonly stats: RpcStats = { requests: 0, items: 0, retries: 0, rateLimited: 0 };
+  /** Multiplier on the pacing reservation: grows on 429, decays on success (AIMD). */
+  paceFactor = 1;
   private readonly minIntervalMs: number;
   private readonly itemsPerSecond: number;
   private readonly maxAttempts: number;
@@ -187,7 +195,9 @@ export class Rpc {
   }
 
   /**
-   * Resolve once the previous request's reservation elapsed: max(minIntervalMs, items / itemsPerSecond).
+   * Resolve once the previous request's reservation elapsed since that request *completed*:
+   * max(minIntervalMs, items / itemsPerSecond) x paceFactor. Measured 2026-09-30: 20-item batches spaced
+   * 400 ms end-to-start never hit 429, while start-to-start spacing did about half of the time.
    * Serialised, so concurrent callers queue up instead of bursting.
    */
   private throttle(items: number): Promise<void> {
@@ -195,7 +205,7 @@ export class Rpc {
       const wait = this.lastRequestAt + this.reservedMs - Date.now();
       if (wait > 0) await sleep(wait);
       this.lastRequestAt = Date.now();
-      this.reservedMs = Math.max(this.minIntervalMs, Math.ceil((items * 1000) / this.itemsPerSecond));
+      this.reservedMs = Math.ceil(Math.max(this.minIntervalMs, (items * 1000) / this.itemsPerSecond) * this.paceFactor);
     });
     this.gate = next.catch(() => {});
     return next;
@@ -210,12 +220,20 @@ export class Rpc {
     for (let attempt = 0; ; attempt++) {
       await this.throttle(items);
       this.stats.requests++;
+      this.stats.items += items;
       try {
-        return await fn();
+        const out = await fn();
+        this.lastRequestAt = Date.now();
+        this.paceFactor = Math.max(1, this.paceFactor * 0.97);
+        return out;
       } catch (err) {
+        this.lastRequestAt = Date.now();
         const kind = classifyError(err);
         if (kind === "fatal" || kind === "log-range" || attempt + 1 >= this.maxAttempts) throw err;
-        if (kind === "rate-limit") this.stats.rateLimited++;
+        if (kind === "rate-limit") {
+          this.stats.rateLimited++;
+          this.paceFactor = Math.min(8, this.paceFactor * 1.5);
+        }
         this.stats.retries++;
         const delay = backoffDelay(attempt, kind === "rate-limit" ? this.backoffBaseMs : this.backoffBaseMs / 2, this.backoffMaxMs);
         this.log(`${label}: ${kind} (${shortMessage(err)}); retry ${attempt + 1}/${this.maxAttempts - 1} in ${delay} ms`);
@@ -242,24 +260,33 @@ export class Rpc {
     const minWindow = opts.minWindow ?? 1_000n;
     const maxWindow = opts.maxWindow ?? 8_000_000n;
     const sparse = opts.sparseThreshold ?? 2_000;
+    const backward = opts.direction === "backward";
     let window = opts.initialWindow ?? 2_000_000n;
-    let cur = opts.fromBlock;
-    while (cur <= opts.toBlock) {
-      const end = cur + window - 1n < opts.toBlock ? cur + window - 1n : opts.toBlock;
+    let cur = backward ? opts.toBlock : opts.fromBlock;
+    while (backward ? cur >= opts.fromBlock : cur <= opts.toBlock) {
+      let start: bigint;
+      let end: bigint;
+      if (backward) {
+        end = cur;
+        start = cur - window + 1n > opts.fromBlock ? cur - window + 1n : opts.fromBlock;
+      } else {
+        start = cur;
+        end = cur + window - 1n < opts.toBlock ? cur + window - 1n : opts.toBlock;
+      }
       let logs: T[];
       try {
-        logs = await this.call(`${label} ${cur}..${end}`, () => fetch(cur, end));
+        logs = await this.call(`${label} ${start}..${end}`, () => fetch(start, end));
       } catch (err) {
         const kind = classifyError(err);
         if ((kind === "log-range" || kind === "transient") && window > minWindow) {
           window = window / 2n > minWindow ? window / 2n : minWindow;
-          this.log(`${label}: ${kind} at ${cur}..${end} (${shortMessage(err)}); window -> ${window}`);
+          this.log(`${label}: ${kind} at ${start}..${end} (${shortMessage(err)}); window -> ${window}`);
           continue;
         }
         throw err;
       }
-      yield { fromBlock: cur, toBlock: end, window, logs };
-      cur = end + 1n;
+      yield { fromBlock: start, toBlock: end, window, logs };
+      cur = backward ? start - 1n : end + 1n;
       if (logs.length < sparse && window < maxWindow) window = window * 2n < maxWindow ? window * 2n : maxWindow;
     }
   }

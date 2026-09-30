@@ -1,15 +1,21 @@
 /**
  * The handheld: shell, LCD, three buttons, keyboard and sound. It owns the screen
- * state machine and asks the data source for everything. Care actions are delegated
- * to `onAction`; in demo mode the caller simulates, in visitor mode nothing can run.
+ * state machine and asks the data source for everything. Care actions come from core's
+ * planner; in demo mode `onSimulate` applies them to the mock, in wallet mode `chain`
+ * dry-runs then signs them, in visitor mode nothing can run.
  */
-import { useCallback, useEffect, useMemo, useReducer, useState, type ReactNode } from "react";
-import type { Friend, StewardAction, StewardActionKind } from "@nest/core";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
+import type { Hex } from "viem";
+import { EXPLORER_URL, type Eligibility, type StewardAction } from "@nest/core";
 import { friendKey, type NestDataSource } from "../data/source.js";
-import { Lcd, LCD_MONO } from "../lcd/Lcd.jsx";
-import { careActions } from "../model/steward.js";
+import { Lcd } from "../lcd/Lcd.jsx";
+import { careMenu, gateMenu, hatchOf, planFor } from "../model/care.js";
+import { shortHash } from "../model/format.js";
+import { petState } from "../model/pet.js";
 import { initialState, step, type Input, type MachineContext, type MachineState, type Screen } from "../screens/machine.js";
 import { renderScreen, type DeviceMode, type ScreenModel } from "../screens/render.js";
+import { phaseAfterDryRun, runInput, type RunState } from "../screens/run.js";
+import type { ChainActions } from "../wallet/actions.js";
 import { Buttons } from "./Buttons.jsx";
 import { click } from "./sound.js";
 import { useDeviceData, type DeviceTarget } from "./useDeviceData.js";
@@ -19,11 +25,10 @@ export interface DeviceProps {
   mode: DeviceMode;
   target: DeviceTarget;
   initialScreen?: Screen;
-  /**
-   * Called when the user confirms a care action; returns the toast line. Never called
-   * in visitor mode. The wallet wiring (steward txs + sendTransaction) lands here later.
-   */
-  onAction?: (action: StewardAction, pet: Friend | null) => Promise<string> | string;
+  /** Demo mode: applies the action to the mock and returns the toast line. */
+  onSimulate?: (action: StewardAction) => Promise<string> | string;
+  /** Wallet mode: ownership gate, dry-run and signing. Absent in demo and visitor mode. */
+  chain?: ChainActions;
   /** Rendered under the device (links, wallet controls). */
   footer?: ReactNode;
 }
@@ -32,7 +37,7 @@ interface DeviceState {
   machine: MachineState;
   petIndex: number;
   /** Action confirmed by the user, waiting to be run; `seq` distinguishes repeats. */
-  pending: { kind: StewardActionKind; seq: number } | null;
+  pending: { kind: StewardAction["kind"]; seq: number } | null;
 }
 
 type DeviceEvent = { type: "input"; input: Input; ctx: MachineContext } | { type: "ran" };
@@ -48,6 +53,7 @@ function reducer(s: DeviceState, e: DeviceEvent): DeviceState {
 }
 
 const SOUND_KEY = "nest.sound";
+const SLOW_TICK_MS = 30_000;
 
 function readSound(): boolean {
   try {
@@ -70,21 +76,90 @@ function usePrefersReducedMotion(): boolean {
   return reduced;
 }
 
-export function Device({ source, mode, target, initialScreen = "PET", onAction, footer }: DeviceProps) {
+const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+export function Device({ source, mode, target, initialScreen = "PET", onSimulate, chain, footer }: DeviceProps) {
   const data = useDeviceData(source, target);
   const [state, dispatch] = useReducer(reducer, initialScreen, (s): DeviceState => ({ machine: initialState(s), petIndex: 0, pending: null }));
   const [toast, setToast] = useState<string | null>(null);
   const [sound, setSound] = useState(readSound);
-  const [tick, setTick] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [eligibility, setEligibility] = useState<Record<string, Eligibility | "pending">>({});
+  const [run, setRun] = useState<RunState | null>(null);
+  const [txLinks, setTxLinks] = useState<Hex[]>([]);
+  const runSeq = useRef(0);
   const reduced = usePrefersReducedMotion();
+  const now = nowMs / 1000;
 
   const friends = data.household?.friends ?? [];
   const pet = friends[Math.min(state.petIndex, Math.max(0, friends.length - 1))] ?? null;
-  const care = useMemo(() => careActions(pet, { protocol: data.protocol, household: data.household }), [pet, data.protocol, data.household]);
+  const petKey = pet ? friendKey(pet.collection, pet.tokenId) : null;
+
+  const plan = useMemo(() => planFor(data.household, data.protocol), [data.household, data.protocol]);
+  const gate = mode === "wallet" && chain && petKey ? (eligibility[petKey] ?? "pending") : null;
+  const care = useMemo(() => gateMenu(careMenu(plan, pet), gate, mode === "visitor"), [plan, pet, gate, mode]);
+  const hatch = useMemo(() => hatchOf(plan), [plan]);
 
   const ctx: MachineContext = useMemo(
-    () => ({ careKinds: care.map((a) => a.kind), friendCount: friends.length, hasEgg: (data.household?.eggTokenId ?? null) !== null, readOnly: mode === "visitor" }),
+    () => ({
+      care: care.map((c) => ({ kind: c.action.kind, enabled: c.enabled })),
+      friendCount: friends.length,
+      hasEgg: (data.household?.eggTokenId ?? null) !== null,
+      readOnly: mode === "visitor",
+    }),
     [care, friends.length, data.household, mode],
+  );
+
+  // Ownership gate: re-checked at a fresh block whenever the pet or the data changes.
+  useEffect(() => {
+    if (mode !== "wallet" || !chain || !pet || !petKey) return;
+    let cancelled = false;
+    setEligibility((m) => ({ ...m, [petKey]: "pending" }));
+    void chain.eligibility(pet).then(
+      (e) => !cancelled && setEligibility((m) => ({ ...m, [petKey]: e })),
+      (err: unknown) => !cancelled && setEligibility((m) => ({ ...m, [petKey]: { eligible: false, reason: errorText(err), blockNumber: 0n } })),
+    );
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, chain, petKey, data.generation]);
+
+  const finishRun = useCallback(
+    (refresh: boolean) => {
+      setRun(null);
+      if (refresh) {
+        chain?.settled?.();
+        data.refresh();
+      }
+    },
+    [chain, data],
+  );
+
+  const sign = useCallback(
+    async (action: StewardAction) => {
+      if (!chain) return;
+      const seq = ++runSeq.current;
+      const total = action.txs.length;
+      const hashes: Hex[] = [];
+      const update = (phase: RunState["phase"]) => {
+        if (runSeq.current === seq) setRun({ action, phase });
+      };
+      try {
+        for (let i = 0; i < total; i++) {
+          const tx = action.txs[i]!;
+          update({ phase: "signing", index: i, total, description: tx.description });
+          const hash = await chain.send(tx, (h) => update({ phase: "pending", index: i, total, hash: h }));
+          hashes.push(hash);
+          setTxLinks((l) => [...l, hash]);
+        }
+        update({ phase: "done", hashes });
+        setToast(`DONE · tx ${shortHash(hashes[hashes.length - 1] ?? "")}`);
+      } catch (e) {
+        update({ phase: "failed", message: errorText(e), hashes });
+      }
+    },
+    [chain],
   );
 
   // Run a confirmed action outside the reducer, once per confirmation.
@@ -92,18 +167,28 @@ export function Device({ source, mode, target, initialScreen = "PET", onAction, 
   useEffect(() => {
     if (!pending) return;
     dispatch({ type: "ran" });
-    const action = care.find((a) => a.kind === pending.kind);
-    if (!action || mode === "visitor") return;
-    if (!onAction) {
-      setToast("Action not wired yet");
+    const item = care.find((c) => c.action.kind === pending.kind);
+    if (!item || !item.enabled || mode === "visitor") return;
+    const action = item.action;
+    if (mode === "demo") {
+      if (!onSimulate) return;
+      void Promise.resolve()
+        .then(() => onSimulate(action))
+        .then(
+          (line) => {
+            setToast(line);
+            data.refresh();
+          },
+          (e: unknown) => setToast(errorText(e)),
+        );
       return;
     }
-    void Promise.resolve(onAction(action, pet)).then(
-      (line) => {
-        setToast(line);
-        data.refresh();
-      },
-      (e: unknown) => setToast(e instanceof Error ? e.message : String(e)),
+    if (!chain) return;
+    const seq = ++runSeq.current;
+    setRun({ action, phase: { phase: "simulating" } });
+    void chain.dryRun(action.txs).then(
+      (results) => runSeq.current === seq && setRun({ action, phase: phaseAfterDryRun(results) }),
+      (e: unknown) => runSeq.current === seq && setRun({ action, phase: { phase: "rejected", reason: errorText(e) } }),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pending?.seq]);
@@ -114,20 +199,27 @@ export function Device({ source, mode, target, initialScreen = "PET", onAction, 
     return () => clearTimeout(t);
   }, [toast]);
 
-  // Idle animation on the PET screen, off under prefers-reduced-motion.
+  // Clock: at the clip's frame rate on the PET screen, slowly elsewhere (vitals and mood follow the time).
   const screen = state.machine.screen;
+  const fps = pet && screen === "PET" && !reduced && !run ? petState(pet, data.protocol, now).animation.fps : 0;
   useEffect(() => {
-    if (reduced || screen !== "PET") return;
-    const t = setInterval(() => setTick((n) => n + 1), 600);
+    const t = setInterval(() => setNowMs(Date.now()), fps > 0 ? Math.round(1000 / fps) : SLOW_TICK_MS);
     return () => clearInterval(t);
-  }, [reduced, screen]);
+  }, [fps]);
 
   const press = useCallback(
     (input: Input) => {
       if (sound) click();
+      if (run) {
+        const command = runInput(run, input);
+        if (command === "sign") void sign(run.action);
+        else if (command === "dismiss") finishRun(false);
+        else if (command === "refresh-and-dismiss") finishRun(true);
+        return;
+      }
       dispatch({ type: "input", input, ctx });
     },
-    [ctx, sound],
+    [ctx, sound, run, sign, finishRun],
   );
 
   useEffect(() => {
@@ -160,16 +252,20 @@ export function Device({ source, mode, target, initialScreen = "PET", onAction, 
 
   const model: ScreenModel = {
     mode,
+    now,
+    reducedMotion: reduced,
     protocol: data.protocol,
     household: data.household,
     snapshot: data.snapshot,
     pet,
-    frames: pet ? (data.sprites[friendKey(pet.collection, pet.tokenId)] ?? []) : [],
+    sprite: petKey ? (data.sprites[petKey] ?? null) : null,
     care,
+    hatch,
     status: data.status,
     loading: data.loading,
+    run,
   };
-  const buffer = renderScreen(state.machine, model, tick);
+  const image = renderScreen(state.machine, model);
 
   return (
     <section className="device" aria-label="Nest handheld">
@@ -181,13 +277,24 @@ export function Device({ source, mode, target, initialScreen = "PET", onAction, 
             {sound ? "♫" : "♪"}
           </button>
         </div>
-        <Lcd buffer={buffer} palette={LCD_MONO} />
+        <Lcd image={image} />
         <Buttons onPress={press} />
         <p className="hint">Arrow keys move, Enter or Space selects</p>
       </div>
       <div className="toast-area" role="status" aria-live="polite">
         {toast && <span className={`toast${mode === "demo" ? " toast-sim" : ""}`}>{mode === "demo" ? `SIMULATED: ${toast}` : toast}</span>}
       </div>
+      {txLinks.length > 0 && (
+        <ul className="tx-links" aria-label="Transactions sent this session">
+          {txLinks.map((hash) => (
+            <li key={hash}>
+              <a href={`${EXPLORER_URL}/tx/${hash}`} target="_blank" rel="noreferrer">
+                tx {shortHash(hash)}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
       {footer}
     </section>
   );

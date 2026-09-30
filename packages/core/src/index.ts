@@ -6,7 +6,6 @@ export * from "./steward/planner.js";
 export * from "./steward/dryRun.js";
 export * from "./gate.js";
 export * from "./sprite/decode.js";
-export * from "./sprite/font5x7.js";
 export * from "./sprite/icons.js";
 export * from "./sprite/render.js";
 export * from "./vitals.js";

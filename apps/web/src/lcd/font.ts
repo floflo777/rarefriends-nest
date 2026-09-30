@@ -1,4 +1,8 @@
-/** 3x5 pixel font for the 96x64 LCD: 24 columns per line at 4 px advance. Unknown glyphs render as a dot. */
+/**
+ * 3x5 pixel font for the 96x64 LCD: 24 columns per line at 4 px advance, 9 text rows at
+ * 7 px. Glyphs are '#'-patterns drawn with core's `blitPattern`; this file holds only the
+ * table. Unknown glyphs render as a dot.
+ */
 export const GLYPH_W = 3;
 export const GLYPH_H = 5;
 export const CHAR_ADVANCE = 4;
@@ -71,7 +75,7 @@ const RAW: Record<string, string[]> = {
 
 const UNKNOWN = ["...", "...", ".#.", "...", "..."];
 
-/** Bitmask rows (bit 2 = leftmost pixel) for a character. */
+/** The '#'-pattern rows of a character (case-insensitive). */
 export function glyphRows(ch: string): readonly string[] {
   return RAW[ch.toUpperCase()] ?? UNKNOWN;
 }

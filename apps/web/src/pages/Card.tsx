@@ -1,18 +1,17 @@
 /** Shareable pet card: a 1200x630 PNG drawn on a canvas, with a Download button. */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import type { Friend, PetFrame, ProtocolState, Snapshot } from "@nest/core";
+import { FRAME_SIZE, describe, frameToRows, streamShare, weiToRf, type Friend, type PetFrame, type ProtocolState, type Snapshot } from "@nest/core";
 import { useDataSource } from "../data/context.jsx";
 import { createMockSource } from "../data/mock.js";
 import { collectionFromSlug, parseTokenId, type NestDataSource } from "../data/source.js";
-import { framePixel, FRAME_SIZE } from "../lcd/sprite.js";
-import { percent, shortAddress, toUnits } from "../model/format.js";
-import { petName } from "../model/vitals.js";
+import { grouped, percent } from "../model/format.js";
 
 const W = 1200;
 const H = 630;
 const BG = "#c5d8a4";
 const FG = "#31401f";
+const MONO = "ui-monospace, Menlo, Consolas, monospace";
 
 export interface CardData {
   friend: Friend;
@@ -37,27 +36,31 @@ export function drawCard(ctx: CanvasRenderingContext2D, d: CardData): void {
   ctx.lineWidth = 6;
   ctx.strokeRect(sx - 20, sy - 20, FRAME_SIZE * scale + 40, FRAME_SIZE * scale + 40);
   if (d.frame) {
-    for (let y = 0; y < FRAME_SIZE; y++) for (let x = 0; x < FRAME_SIZE; x++) if (framePixel(d.frame, x, y)) ctx.fillRect(sx + x * scale, sy + y * scale, scale, scale);
+    frameToRows(d.frame).forEach((rows, y) => rows.forEach((on, x) => on && ctx.fillRect(sx + x * scale, sy + y * scale, scale, scale)));
   }
 
   const tx = 540;
-  ctx.font = "bold 84px ui-monospace, Menlo, Consolas, monospace";
+  const personality = describe(friend);
   ctx.textBaseline = "top";
-  ctx.fillText(petName(friend), tx, 90);
-  ctx.font = "40px ui-monospace, Menlo, Consolas, monospace";
+  ctx.font = `bold 84px ${MONO}`;
+  ctx.fillText(personality.name, tx, 70);
+  ctx.font = `34px ${MONO}`;
   const gen = friend.collection === "Genesis" ? "Genesis" : `Generation ${friend.generation}`;
-  ctx.fillText(`${gen}  ·  Tier ${friend.position.tier}`, tx, 200);
-  if (friend.familyName) ctx.fillText(`Family ${friend.familyName}`, tx, 256);
+  ctx.fillText(`${friend.familyName ?? personality.family} family`, tx, 175);
+  ctx.fillText(`${gen}  ·  Tier ${friend.position.tier}`, tx, 222);
 
-  const share = d.protocol && toUnits(d.protocol.totalWeight) > 0 ? toUnits(friend.position.weight) / toUnits(d.protocol.totalWeight) : null;
-  ctx.fillText(`Weight share  ${share === null ? "-" : percent(share)}`, tx, 330);
-  const burned = d.snapshot?.leaderboard.find((r) => r.owner.toLowerCase() === friend.owner.toLowerCase())?.burnedRf ?? 0;
-  ctx.fillText(`Household burned  ${Math.round(burned).toLocaleString("en-US")} RF`, tx, 386);
+  ctx.font = `30px ${MONO}`;
+  const share = d.protocol ? streamShare(friend, d.protocol) : null;
+  ctx.fillText(`Weight share  ${share === null ? "-" : percent(share)}`, tx, 292);
+  ctx.fillText(`Unclaimed  ${grouped(weiToRf(friend.rewards.earnedRf))} RF  ·  ${weiToRf(friend.rewards.earnedWeth).toFixed(4)} WETH`, tx, 336);
+  const rank = d.snapshot?.leaderboard.find((r) => r.owner.toLowerCase() === friend.owner.toLowerCase());
+  ctx.fillText(`Household burned  ${rank ? `${grouped(rank.burnedRf)} RF` : "not ranked yet"}`, tx, 380);
 
-  ctx.font = "30px ui-monospace, Menlo, Consolas, monospace";
-  ctx.fillText(friend.owner, tx, 480);
-  ctx.font = "28px ui-monospace, Menlo, Consolas, monospace";
-  ctx.fillText("NEST  ·  Rare Friends on Robinhood Chain", tx, 550);
+  ctx.font = `21px ${MONO}`;
+  ctx.fillText(`wallet ${friend.wallet}`, tx, 460);
+  ctx.fillText(`owner  ${friend.owner}`, tx, 492);
+  ctx.font = `28px ${MONO}`;
+  ctx.fillText("nest · rarefriends", tx, 560);
 }
 
 export function CardPage() {
@@ -77,12 +80,11 @@ export function CardPage() {
     void (async () => {
       try {
         const friend = await source.friend(collection, tokenId);
-        if (!friend) throw new Error("Friend not found");
-        const [frames, protocol, snapshot] = await Promise.allSettled([source.sprite(friend), source.protocolState(), source.snapshot()]);
+        const [sprite, protocol, snapshot] = await Promise.allSettled([source.sprite(friend), source.protocolState(), source.snapshot()]);
         if (!alive) return;
         setData({
           friend,
-          frame: frames.status === "fulfilled" ? (frames.value[0] ?? null) : null,
+          frame: sprite.status === "fulfilled" ? (sprite.value.idle[0] ?? null) : null,
           protocol: protocol.status === "fulfilled" ? protocol.value : null,
           snapshot: snapshot.status === "fulfilled" ? snapshot.value : null,
         });
@@ -126,7 +128,7 @@ export function CardPage() {
 
   return (
     <main className="page card-page">
-      <canvas ref={canvasRef} className="card" width={W} height={H} role="img" aria-label={`Pet card for ${slug} ${rawId}`} />
+      <canvas ref={canvasRef} className="card" width={W} height={H} role="img" aria-label={`Pet card for ${slug} ${rawId}`} data-ready={data ? "true" : "false"} />
       {error && <p className="error">{error}</p>}
       <nav className="under">
         <button type="button" className="primary" onClick={download} disabled={!data}>

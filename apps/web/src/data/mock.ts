@@ -1,67 +1,80 @@
 /**
- * Mock data source: realistic fixtures from Robinhood Chain reads on 2026-09-30 plus a
- * synthetic demo household. `simulate()` mutates the fixtures so the demo's care
- * actions visibly change the pet; nothing here touches a wallet or the chain.
+ * Mock data source: real core types built from Robinhood Chain reads on 2026-09-30 plus a
+ * synthetic demo household. `simulate(action)` applies the Steward's own prepared calldata
+ * to the fixtures the way the protocol would (claim, upgrade, promote, activate, hardwire,
+ * RF transfer), so the demo runs the exact same planner, vitals and personality as live
+ * mode. Nothing here touches a wallet or the chain.
  */
+import { decodeFunctionData, isAddressEqual, parseEther } from "viem";
 import type { Address } from "viem";
 import {
-  DENOMINATION_RF,
-  GENERATION_WEIGHT_BPS,
-  GENESIS_WEIGHT,
-  TIER_CUMULATIVE_BPS,
+  ACTIVATION_MANAGER_ABI,
+  ADDRESSES,
+  ERC20_ABI,
+  FAMILY_NAMES,
+  FRAME_COUNT,
+  activateCostWei,
+  asciiToFrame,
+  frameToRows,
+  hardwireCostWei,
+  promoteCostWei,
+  rfToWei,
+  rowsToFrame,
+  upgradeCostWei,
+  weiToRf,
+  weightFor,
   type Collection,
   type Friend,
   type Household,
   type PetFrame,
   type ProtocolState,
   type Snapshot,
-  type StewardActionKind,
+  type Sprite,
+  type StewardAction,
 } from "@nest/core";
-import { frameFromRows, mirrorFrame } from "../lcd/sprite.js";
-import { fromUnits } from "../model/format.js";
-import type { NestDataSource } from "./source.js";
+import { SourceError, type NestDataSource } from "./source.js";
 
-/** Friend 1969 (Generations, family Asymmetry), one of its 64 on-chain frames. */
-export const FRIEND_1969_FRAME: readonly string[] = [
-  "................",
-  "................",
-  "................",
-  "................",
-  "................",
-  "....#......#....",
-  "....########....",
-  "....#..##..#....",
-  "....########....",
-  ".....######.#...",
-  ".....##..####...",
-  ".....#######....",
-  ".....######.....",
-  ".....##..##.....",
-  ".....##..##.....",
-  "................",
-];
+/** Friend 1969 (Generations, family Asymmetry), frame 0 of its 64 on-chain frames. */
+export const FRIEND_1969_FRAME = `
+................
+................
+................
+................
+................
+....#......#....
+....########....
+....#..##..#....
+....########....
+.....######.#...
+.....##..####...
+.....#######....
+.....######.....
+.....##..##.....
+.....##..##.....
+................`;
 
 /** A generic pup silhouette for Friends whose frames are not hardcoded. */
-const GENERIC_FRAME: readonly string[] = [
-  "................",
-  "................",
-  "................",
-  "......####......",
-  ".....#....#.....",
-  "....#.#..#.#....",
-  "....#......#....",
-  "....#.####.#....",
-  ".....#....#.....",
-  "......####......",
-  ".....#....#.....",
-  "....#......#....",
-  "....#......#....",
-  ".....#....#.....",
-  "......####......",
-  "................",
-];
+const GENERIC_FRAME = `
+................
+................
+................
+......####......
+.....#....#.....
+....#.#..#.#....
+....#......#....
+....#.####.#....
+.....#....#.....
+......####......
+.....#....#.....
+....#......#....
+....#......#....
+.....#....#.....
+......####......
+................`;
 
 export const DEMO_OWNER: Address = "0xd3a0d3a0d3a0d3a0d3a0d3a0d3a0d3a0d3a0d3a0";
+const DEMO_RF_BALANCE = parseEther("250000");
+const FIRST_EGG = 700_001n;
 const HOUSEHOLD_RANK_BURNED_RF = 84_500;
 
 function tba(tokenId: bigint, collection: Collection): Address {
@@ -69,8 +82,34 @@ function tba(tokenId: bigint, collection: Collection): Address {
   return `0x${tag}${tokenId.toString(16).padStart(38, "0")}` as Address;
 }
 
-function generationsFriend(tokenId: number, generation: number, tier: number, weight: string, extra: Partial<Friend> = {}): Friend {
-  const family = tokenId % 9;
+function shift(frame: PetFrame, dy: number): PetFrame {
+  const rows = frameToRows(frame);
+  const blank = () => Array.from({ length: 16 }, () => false);
+  const out = dy > 0 ? [...Array.from({ length: dy }, blank), ...rows.slice(0, 16 - dy)] : [...rows.slice(-dy), ...Array.from({ length: -dy }, blank)];
+  return rowsToFrame(out);
+}
+
+function mirror(frame: PetFrame): PetFrame {
+  return rowsToFrame(frameToRows(frame).map((row) => [...row].reverse()));
+}
+
+/** 64 frames from one pose: the idle clip bobs, the walk clip steps and turns. */
+export function spriteFromPose(ascii: string): Sprite {
+  const base = asciiToFrame(ascii);
+  const up = shift(base, -1);
+  const flipped = mirror(base);
+  const flippedUp = shift(flipped, -1);
+  const frames: PetFrame[] = [];
+  for (let i = 0; i < FRAME_COUNT / 2; i++) frames.push(Math.floor(i / 8) % 2 === 0 ? base : up);
+  for (let i = 0; i < FRAME_COUNT / 2; i++) {
+    const turned = Math.floor(i / 16) % 2 === 1;
+    const step = Math.floor(i / 4) % 2 === 1;
+    frames.push(turned ? (step ? flippedUp : flipped) : step ? up : base);
+  }
+  return { frames, idle: frames.slice(0, FRAME_COUNT / 2), walk: frames.slice(FRAME_COUNT / 2) };
+}
+
+function generationsFriend(tokenId: number, generation: number, tier: number, family: number, extra: Partial<Friend> = {}): Friend {
   return {
     collection: "Generations",
     tokenId: BigInt(tokenId),
@@ -78,8 +117,9 @@ function generationsFriend(tokenId: number, generation: number, tier: number, we
     wallet: tba(BigInt(tokenId), "Generations"),
     generation,
     family,
+    familyName: FAMILY_NAMES[family] ?? "Skeleton",
     seed: tokenId,
-    position: { tier, weight: fromUnits(weight), active: true },
+    position: { tier, weight: rfToWei(weightFor("Generations", generation, tier)), active: true },
     rewards: { earnedRf: 0n, earnedWeth: 0n },
     savings: { rf: 0n, weth: 0n, eth: 0n },
     ...extra,
@@ -89,21 +129,17 @@ function generationsFriend(tokenId: number, generation: number, tier: number, we
 function initialFriends(): Friend[] {
   return [
     // Real facts: Gen 1 tier 2, weight 416,250, family Asymmetry, 36,189 RF + 0.0228 WETH unclaimed.
-    generationsFriend(1969, 1, 2, "416250", {
-      family: 4,
-      familyName: "Asymmetry",
-      rewards: { earnedRf: fromUnits("36189"), earnedWeth: fromUnits("0.0228") },
-      savings: { rf: fromUnits("12400"), weth: fromUnits("0.0912"), eth: fromUnits("0.004") },
+    generationsFriend(1969, 1, 2, 4, {
+      rewards: { earnedRf: parseEther("36189"), earnedWeth: parseEther("0.0228") },
+      savings: { rf: parseEther("12400"), weth: parseEther("0.0912"), eth: parseEther("0.004") },
     }),
-    // Real facts: Gen 4 tier 1, weight 198.75. Family is a placeholder (familyOf not read yet).
-    generationsFriend(343695, 4, 1, "198.75", {
-      familyName: "Hoverer",
-      family: 5,
-      rewards: { earnedRf: fromUnits("3.2"), earnedWeth: 0n },
-      savings: { rf: fromUnits("41"), weth: 0n, eth: 0n },
+    // Real facts: Gen 4 tier 1, weight 198.75. Family is a placeholder.
+    generationsFriend(343695, 4, 1, 5, {
+      rewards: { earnedRf: parseEther("3.2"), earnedWeth: 0n },
+      savings: { rf: parseEther("41"), weth: 0n, eth: 0n },
     }),
     // Synthetic Gen 6 pup: 1 RF hardwired, weight 1.10, never fed.
-    generationsFriend(612044, 6, 0, "1.1", { familyName: "Cellular", family: 3, rewards: { earnedRf: fromUnits("0.0141"), earnedWeth: 0n } }),
+    generationsFriend(612044, 6, 0, 3, { rewards: { earnedRf: parseEther("0.0141"), earnedWeth: 0n } }),
     // Synthetic inactive Genesis Friend (weight 0): the Wake action.
     {
       collection: "Genesis",
@@ -111,6 +147,9 @@ function initialFriends(): Friend[] {
       owner: DEMO_OWNER,
       wallet: tba(77n, "Genesis"),
       generation: 0,
+      family: 7,
+      familyName: "Sparkling",
+      seed: 77,
       position: { tier: 0, weight: 0n, active: false },
       rewards: { earnedRf: 0n, earnedWeth: 0n },
       savings: { rf: 0n, weth: 0n, eth: 0n },
@@ -119,14 +158,15 @@ function initialFriends(): Friend[] {
 }
 
 function initialProtocol(): ProtocolState {
-  const periodFinish = Math.floor(Date.UTC(2026, 8, 30, 15, 9, 6) / 1000);
+  const now = Math.floor(Date.now() / 1000);
+  const periodFinish = now + 3 * 86_400;
   return {
     blockNumber: 76_460_000n,
-    timestamp: periodFinish - 6 * 3600,
-    totalWeight: fromUnits("1068713093.63"),
-    rfStream: { amount: fromUnits("8547984.3"), periodFinish, lastUpdate: periodFinish - 6 * 3600 },
-    wethStream: { amount: fromUnits("1.6288"), periodFinish, lastUpdate: periodFinish - 6 * 3600 },
-    rfTotalSupply: fromUnits("947740000"),
+    timestamp: now,
+    totalWeight: parseEther("1068713093.63"),
+    rfStream: { amount: parseEther("8547984.3"), periodFinish, lastUpdate: now - 6 * 3600 },
+    wethStream: { amount: parseEther("1.6288"), periodFinish, lastUpdate: now - 6 * 3600 },
+    rfTotalSupply: parseEther("947740000"),
   };
 }
 
@@ -143,7 +183,7 @@ function fakeAddress(i: number): Address {
 
 function initialSnapshot(): Snapshot {
   const now = Math.floor(Date.UTC(2026, 8, 30, 9, 0, 0) / 1000);
-  const others = [4_212_500, 2_900_000, 1_150_000, 640_000, 84_500, 61_000, 25_300, 9_950, 2_100, 505];
+  const others = [4_212_500, 2_900_000, 1_150_000, 640_000, HOUSEHOLD_RANK_BURNED_RF, 61_000, 25_300, 9_950, 2_100, 505];
   const leaderboard = others.map((burnedRf, i) => ({
     owner: i === 4 ? DEMO_OWNER : fakeAddress(i),
     burnedRf,
@@ -176,42 +216,125 @@ function initialSnapshot(): Snapshot {
       wallets: 3_738,
       firstBlock: 64_590_957,
     },
-    genesis: { activated: 215, inactive: 809, reserveHeld: 0 },
+    genesis: { activated: 495, inactive: 118, reserveHeld: 411 },
   };
 }
 
 export interface MockSource extends NestDataSource {
-  /** Apply a care action to the fixtures (demo mode). Returns a one-line description. */
-  simulate(kind: StewardActionKind, target: { collection: Collection; tokenId: bigint } | null): string;
+  /** Apply a Steward action's prepared transactions to the fixtures (demo mode). Returns a one-line description. */
+  simulate(action: StewardAction): string;
   /** Reset fixtures to their initial state (tests). */
   reset(): void;
+}
+
+const rf = (wei: bigint) => weiToRf(wei).toLocaleString("en-US", { maximumFractionDigits: 2 });
+
+function collectionOf(address: Address): Collection {
+  return isAddressEqual(address, ADDRESSES.genesis) ? "Genesis" : "Generations";
 }
 
 export function createMockSource(): MockSource {
   let friends = initialFriends();
   let protocol = initialProtocol();
-  let egg: bigint | null = 700_001n;
+  let egg: bigint | null = FIRST_EGG;
+  let rfBalance = DEMO_RF_BALANCE;
+  let rfAllowance = 0n;
   let burnedByHousehold = HOUSEHOLD_RANK_BURNED_RF;
   let householdActions = 24;
-  const snapshot = initialSnapshot();
+  let snapshot = initialSnapshot();
 
-  const find = (collection: Collection, tokenId: bigint) => friends.find((f) => f.collection === collection && f.tokenId === tokenId) ?? null;
-
-  const burn = (costRf: number) => {
-    burnedByHousehold += costRf / 2;
-    householdActions += 1;
-    protocol = { ...protocol, rfTotalSupply: protocol.rfTotalSupply - fromUnits(costRf / 2) };
-    snapshot.totals = { ...snapshot.totals, burnedRf: snapshot.totals.burnedRf + costRf / 2 };
-    const me = snapshot.leaderboard.find((r) => r.owner === DEMO_OWNER);
-    if (me) {
-      me.burnedRf = burnedByHousehold;
-      me.actions = householdActions;
-      snapshot.leaderboard.sort((a, b) => b.burnedRf - a.burnedRf);
-    }
+  const find = (collection: Collection, tokenId: bigint): Friend | null => friends.find((f) => f.collection === collection && f.tokenId === tokenId) ?? null;
+  const replace = (updated: Friend): void => {
+    friends = friends.map((f) => (f.collection === updated.collection && f.tokenId === updated.tokenId ? updated : f));
   };
 
-  const addWeight = (delta: bigint) => {
-    protocol = { ...protocol, totalWeight: protocol.totalWeight + delta };
+  /** A paid action: RF leaves the wallet, half is burned, half streams; weight moves. */
+  const pay = (costWei: bigint, deltaWeight: bigint): void => {
+    rfBalance -= costWei;
+    rfAllowance = 0n;
+    const burned = costWei / 2n;
+    burnedByHousehold += weiToRf(burned);
+    householdActions += 1;
+    protocol = { ...protocol, rfTotalSupply: protocol.rfTotalSupply - burned, totalWeight: protocol.totalWeight + deltaWeight };
+    snapshot = { ...snapshot, totals: { ...snapshot.totals, burnedRf: snapshot.totals.burnedRf + weiToRf(burned) } };
+    const board = snapshot.leaderboard.map((r) => (isAddressEqual(r.owner, DEMO_OWNER) ? { ...r, burnedRf: burnedByHousehold, actions: householdActions } : r));
+    snapshot.leaderboard = board.sort((a, b) => b.burnedRf - a.burnedRf);
+  };
+
+  const applyErc20 = (data: `0x${string}`): string => {
+    const call = decodeFunctionData({ abi: ERC20_ABI, data });
+    if (call.functionName === "approve") {
+      rfAllowance = call.args[1];
+      return "";
+    }
+    if (call.functionName === "transfer") {
+      const [to, amount] = call.args;
+      const target = friends.find((f) => isAddressEqual(f.wallet, to));
+      rfBalance -= amount;
+      if (target) replace({ ...target, savings: { ...target.savings, rf: target.savings.rf + amount } });
+      return `Saved ${rf(amount)} RF into ${target ? `#${target.tokenId}'s` : "the"} wallet`;
+    }
+    throw new Error(`mock: unsupported RF call ${call.functionName}`);
+  };
+
+  const applyManager = (data: `0x${string}`): string => {
+    const call = decodeFunctionData({ abi: ACTIVATION_MANAGER_ABI, data });
+    switch (call.functionName) {
+      case "claim": {
+        const [asset, collection, tokenId] = call.args;
+        const friend = find(collectionOf(collection), tokenId);
+        if (!friend) throw new Error("mock: claim on an unknown Friend");
+        const isRf = isAddressEqual(asset, ADDRESSES.rf);
+        const amount = isRf ? friend.rewards.earnedRf : friend.rewards.earnedWeth;
+        replace({
+          ...friend,
+          rewards: isRf ? { ...friend.rewards, earnedRf: 0n } : { ...friend.rewards, earnedWeth: 0n },
+          savings: isRf ? { ...friend.savings, rf: friend.savings.rf + amount } : { ...friend.savings, weth: friend.savings.weth + amount },
+        });
+        return `Fed #${friend.tokenId}: ${isRf ? `${rf(amount)} RF` : `${weiToRf(amount).toFixed(4)} WETH`} claimed to its wallet`;
+      }
+      case "upgrade": {
+        const [collection, tokenId] = call.args;
+        const friend = find(collectionOf(collection), tokenId);
+        if (!friend) throw new Error("mock: upgrade on an unknown Friend");
+        const tier = friend.position.tier + 1;
+        const weight = rfToWei(weightFor(friend.collection, friend.generation, tier));
+        pay(upgradeCostWei(friend.collection, friend.generation, friend.position.tier), weight - friend.position.weight);
+        replace({ ...friend, position: { tier, weight, active: true } });
+        return `Trained #${friend.tokenId} to tier ${tier}`;
+      }
+      case "promote": {
+        const [tokenId] = call.args;
+        const friend = find("Generations", tokenId);
+        if (!friend) throw new Error("mock: promote on an unknown Friend");
+        const generation = friend.generation - 1;
+        const weight = friend.position.active ? rfToWei(weightFor("Generations", generation, 0)) : friend.position.weight;
+        pay(promoteCostWei(friend.generation), weight - friend.position.weight);
+        replace({ ...friend, generation, position: { tier: 0, weight, active: friend.position.active } });
+        return `Raised #${friend.tokenId} to Gen ${generation}`;
+      }
+      case "activate": {
+        const [collection, tokenId] = call.args;
+        const friend = find(collectionOf(collection), tokenId);
+        if (!friend) throw new Error("mock: activate on an unknown Friend");
+        const weight = rfToWei(weightFor(friend.collection, friend.generation, friend.position.tier));
+        pay(activateCostWei(friend.collection, friend.generation), weight);
+        replace({ ...friend, position: { ...friend.position, weight, active: true } });
+        return `Woke ${friend.collection} #${friend.tokenId}`;
+      }
+      case "hardwire": {
+        const [generation] = call.args;
+        if (egg === null) throw new Error("mock: no egg to hatch");
+        const id = Number(egg);
+        const pup = generationsFriend(id, generation, 0, id % FAMILY_NAMES.length);
+        friends = [...friends, pup];
+        pay(hardwireCostWei(generation), pup.position.weight);
+        egg = egg + 1n;
+        return `Hatched #${id} as a Gen-${generation} pup`;
+      }
+      default:
+        throw new Error(`mock: unsupported protocol call ${call.functionName}`);
+    }
   };
 
   return {
@@ -219,95 +342,43 @@ export function createMockSource(): MockSource {
       return protocol;
     },
     async friend(collection, tokenId) {
-      return find(collection, tokenId);
+      const f = find(collection, tokenId);
+      if (!f) throw new SourceError("not-found", `${collection} #${tokenId} is not in the demo household`);
+      return f;
     },
     async household(owner): Promise<Household> {
-      const mine = owner.toLowerCase() === DEMO_OWNER.toLowerCase();
+      const mine = isAddressEqual(owner, DEMO_OWNER);
       return {
         owner,
         friends: mine ? friends.slice() : [],
         eggTokenId: mine ? egg : null,
-        rfBalance: mine ? fromUnits("250000") : 0n,
-        rfAllowance: 0n,
+        rfBalance: mine ? rfBalance : 0n,
+        rfAllowance: mine ? rfAllowance : 0n,
       };
     },
     async snapshot() {
       return { ...snapshot, leaderboard: snapshot.leaderboard.map((r) => ({ ...r })) };
     },
-    async sprite(friend): Promise<PetFrame[]> {
-      if (friend.collection === "Generations" && friend.tokenId === 1969n) {
-        const f = frameFromRows(FRIEND_1969_FRAME);
-        return [f, mirrorFrame(f)];
-      }
-      const f = frameFromRows(GENERIC_FRAME);
-      return [f, mirrorFrame(f)];
+    async sprite(friend): Promise<Sprite> {
+      return spriteFromPose(friend.collection === "Generations" && friend.tokenId === 1969n ? FRIEND_1969_FRAME : GENERIC_FRAME);
     },
-    simulate(kind, target) {
-      const friend = target ? find(target.collection, target.tokenId) : null;
-      const replace = (updated: Friend) => {
-        friends = friends.map((f) => (f.collection === updated.collection && f.tokenId === updated.tokenId ? updated : f));
-      };
-      switch (kind) {
-        case "claim": {
-          if (!friend) return "Nothing to feed";
-          replace({
-            ...friend,
-            rewards: { earnedRf: 0n, earnedWeth: 0n },
-            savings: { ...friend.savings, rf: friend.savings.rf + friend.rewards.earnedRf, weth: friend.savings.weth + friend.rewards.earnedWeth },
-          });
-          return `Fed #${friend.tokenId}: rewards claimed to its wallet`;
-        }
-        case "train": {
-          if (!friend || friend.position.tier >= TIER_CUMULATIVE_BPS.length - 1) return "Cannot train";
-          const cur = TIER_CUMULATIVE_BPS[friend.position.tier] ?? 10_000;
-          const next = TIER_CUMULATIVE_BPS[friend.position.tier + 1] ?? cur;
-          const weight = (friend.position.weight * BigInt(next)) / BigInt(cur);
-          const denom = friend.collection === "Genesis" ? 1_000_000 : (DENOMINATION_RF[friend.generation] ?? 0);
-          burn((denom * (next - cur)) / 10_000);
-          addWeight(weight - friend.position.weight);
-          replace({ ...friend, position: { ...friend.position, tier: friend.position.tier + 1, weight } });
-          return `Trained #${friend.tokenId} to tier ${friend.position.tier + 1}`;
-        }
-        case "raise": {
-          if (!friend || friend.collection !== "Generations" || friend.generation <= 1) return "Cannot raise";
-          const g = friend.generation;
-          const num = BigInt((DENOMINATION_RF[g - 1] ?? 0) * (GENERATION_WEIGHT_BPS[g - 1] ?? 0));
-          const den = BigInt((DENOMINATION_RF[g] ?? 1) * (GENERATION_WEIGHT_BPS[g] ?? 1));
-          const weight = (friend.position.weight * num) / den;
-          burn((DENOMINATION_RF[g - 1] ?? 0) - (DENOMINATION_RF[g] ?? 0));
-          addWeight(weight - friend.position.weight);
-          replace({ ...friend, generation: g - 1, position: { ...friend.position, weight } });
-          return `Raised #${friend.tokenId} to generation ${g - 1}`;
-        }
-        case "wake": {
-          if (!friend || friend.collection !== "Genesis" || friend.position.active) return "Already awake";
-          const weight = fromUnits(GENESIS_WEIGHT);
-          burn(100_000);
-          addWeight(weight);
-          replace({ ...friend, position: { tier: 0, weight, active: true } });
-          return `Woke Genesis #${friend.tokenId}`;
-        }
-        case "hatch": {
-          if (egg === null) return "No egg";
-          const id = Number(egg);
-          const gen6 = generationsFriend(id, 6, 0, "1.1", { familyName: "Skeleton", family: 0 });
-          friends = [...friends, gen6];
-          burn(DENOMINATION_RF[6] ?? 1);
-          addWeight(gen6.position.weight);
-          egg = null;
-          return `Hatched #${id} as a generation 6 pup`;
-        }
-        default:
-          return "Not simulated";
+    simulate(action) {
+      let line = "";
+      for (const tx of action.txs) {
+        const result = isAddressEqual(tx.to, ADDRESSES.rf) ? applyErc20(tx.data) : isAddressEqual(tx.to, ADDRESSES.activationManager) ? applyManager(tx.data) : "";
+        if (result) line = line ? `${line}; ${result}` : result;
       }
+      return line || `Nothing to do for ${action.label}`;
     },
     reset() {
       friends = initialFriends();
       protocol = initialProtocol();
-      egg = 700_001n;
+      egg = FIRST_EGG;
+      rfBalance = DEMO_RF_BALANCE;
+      rfAllowance = 0n;
       burnedByHousehold = HOUSEHOLD_RANK_BURNED_RF;
       householdActions = 24;
-      Object.assign(snapshot, initialSnapshot());
+      snapshot = initialSnapshot();
     },
   };
 }

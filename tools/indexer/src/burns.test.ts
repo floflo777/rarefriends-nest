@@ -51,6 +51,11 @@ describe("mergeBurns", () => {
     expect(merged.map((r) => r.logIndex)).toEqual([0, 1]);
     expect(burnKey(tx)).not.toBe(burnKey(sameTxOtherLog));
   });
+  it("only drops cached records inside [reindexFrom, reindexTo] when an upper bound is given", () => {
+    const cached = [rec(1), rec(5), rec(9)];
+    const merged = mergeBurns(cached, [rec(6)], 4n, 7n);
+    expect(merged.map((r) => Number(r.blockNumber))).toEqual([1, 6, 9]);
+  });
   it("is a plain union when reindexFrom is beyond everything", () => {
     expect(mergeBurns([rec(1)], [rec(2)], 10n)).toHaveLength(2);
     expect(mergeBurns([], [], 0n)).toEqual([]);

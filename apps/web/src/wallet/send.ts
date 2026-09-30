@@ -1,27 +1,24 @@
 /**
  * Sends a prepared protocol transaction through the injected wallet and waits for its
- * receipt on the public RPC. The UI never calls this in demo or visitor mode; the care
- * flow will be wired to it once packages/core's steward produces `PreparedTx`s.
+ * receipt on the public RPC (core's client). Only wallet mode reaches this; demo and
+ * visitor mode never do.
  */
-import { createPublicClient, http, numberToHex, type Address, type EIP1193Provider, type Hex, type TransactionReceipt } from "viem";
-import { RPC_URL, type PreparedTx } from "@nest/core";
+import { numberToHex, type Address, type EIP1193Provider, type Hex } from "viem";
+import type { NestClient, PreparedTx } from "@nest/core";
 import { CHAIN_ID_HEX, ensureChain } from "./eip1193.js";
-import { robinhoodChain } from "./chain.js";
 
-export const publicClient = createPublicClient({ chain: robinhoodChain, transport: http(RPC_URL) });
-
-export interface SendResult {
-  hash: Hex;
-  receipt: TransactionReceipt;
-}
-
-export async function sendTransaction(provider: EIP1193Provider, from: Address, tx: PreparedTx): Promise<SendResult> {
+/**
+ * Prompts the wallet to switch to (or add) Robinhood Chain, asks it to sign and send `tx`,
+ * reports the hash as soon as the wallet returns it, then waits for the receipt.
+ */
+export async function sendTransaction(provider: EIP1193Provider, client: NestClient, from: Address, tx: PreparedTx, onSent?: (hash: Hex) => void): Promise<Hex> {
   await ensureChain(provider);
   const hash = (await provider.request({
     method: "eth_sendTransaction",
     params: [{ from, to: tx.to, data: tx.data, value: numberToHex(tx.value), chainId: CHAIN_ID_HEX }],
   })) as Hex;
-  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  onSent?.(hash);
+  const receipt = await client.waitForTransactionReceipt({ hash });
   if (receipt.status !== "success") throw new Error(`Transaction reverted: ${hash}`);
-  return { hash, receipt };
+  return hash;
 }

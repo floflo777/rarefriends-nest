@@ -1,52 +1,35 @@
 /**
  * The LCD: a 96x64 <canvas> whose CSS size is an integer multiple of the panel size.
- * It blits a 1-bit framebuffer (Uint8Array of 96*64 0/1 values) with a two-colour
- * palette. `image-rendering: pixelated` keeps pixels crisp.
+ * It blits core's 1-bit buffer through `lcdToImageData` with a two-colour palette and
+ * mirrors the screen's text transcript into a visually hidden element for screen readers
+ * (and tests). `image-rendering: pixelated` keeps pixels crisp.
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { LCD_H, LCD_W } from "./framebuffer.js";
+import { LCD_PALETTE, lcdToImageData, type LcdPalette } from "@nest/core";
+import { LCD_H, LCD_W, type ScreenImage } from "./paint.js";
 
-export interface LcdPalette {
-  /** CSS colours for off and on pixels. */
-  off: string;
-  on: string;
-}
-
-export const LCD_MONO: LcdPalette = { off: "#c5d8a4", on: "#31401f" };
+export { LCD_PALETTE };
 
 export interface LcdProps {
-  buffer: Uint8Array;
+  image: ScreenImage;
   palette?: LcdPalette;
   /** Fixed integer scale; when omitted the LCD fits its container width. */
   scale?: number;
   label?: string;
 }
 
-function parseColor(css: string): [number, number, number] {
-  const m = /^#([0-9a-f]{6})$/i.exec(css.trim());
-  if (!m || !m[1]) return [0, 0, 0];
-  const n = parseInt(m[1], 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+export function cssColor(c: LcdPalette["off"]): string {
+  return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
 }
 
-export function paintBuffer(ctx: CanvasRenderingContext2D, buffer: Uint8Array, palette: LcdPalette): void {
-  const img = ctx.createImageData(LCD_W, LCD_H);
-  const on = parseColor(palette.on);
-  const off = parseColor(palette.off);
-  const d = img.data;
-  const n = LCD_W * LCD_H;
-  for (let i = 0; i < n; i++) {
-    const c = buffer[i] ? on : off;
-    const o = i * 4;
-    d[o] = c[0];
-    d[o + 1] = c[1];
-    d[o + 2] = c[2];
-    d[o + 3] = 255;
-  }
+export function paintBuffer(ctx: CanvasRenderingContext2D, pixels: Uint8Array, palette: LcdPalette): void {
+  const rgba = lcdToImageData(pixels, palette);
+  const img = ctx.createImageData(rgba.width, rgba.height);
+  img.data.set(rgba.data);
   ctx.putImageData(img, 0, 0);
 }
 
-export function Lcd({ buffer, palette = LCD_MONO, scale, label = "Nest LCD" }: LcdProps) {
+export function Lcd({ image, palette = LCD_PALETTE, scale, label = "Nest LCD" }: LcdProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [autoScale, setAutoScale] = useState(3);
@@ -69,8 +52,8 @@ export function Lcd({ buffer, palette = LCD_MONO, scale, label = "Nest LCD" }: L
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!ctx) return;
-    paintBuffer(ctx, buffer, palette);
-  }, [buffer, palette]);
+    paintBuffer(ctx, image.pixels, palette);
+  }, [image, palette]);
 
   const s = scale ?? autoScale;
   return (
@@ -80,11 +63,17 @@ export function Lcd({ buffer, palette = LCD_MONO, scale, label = "Nest LCD" }: L
         className="lcd"
         width={LCD_W}
         height={LCD_H}
-        style={{ width: LCD_W * s, height: LCD_H * s, backgroundColor: palette.off }}
+        style={{ width: LCD_W * s, height: LCD_H * s, backgroundColor: cssColor(palette.off) }}
         role="img"
         aria-label={label}
+        aria-describedby="lcd-text"
         data-scale={s}
       />
+      <div id="lcd-text" className="sr-only" data-testid="lcd-text">
+        {image.text.map((line, i) => (
+          <div key={i}>{line}</div>
+        ))}
+      </div>
     </div>
   );
 }

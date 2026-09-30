@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { asciiToFrame } from "../decode.js";
-import { FONT_5X7, GLYPH_HEIGHT, GLYPH_WIDTH } from "../font5x7.js";
 import { ICONS, ICON_NAMES } from "../icons.js";
 import {
   blitFrame,
+  blitPattern,
   createLcd,
   drawBar,
   drawIcon,
-  drawText5x7,
   getPixel,
   lcdToAscii,
   lcdToImageData,
@@ -15,8 +14,6 @@ import {
   LCD_SIZE,
   renderLcd,
   renderLcdBuffer,
-  textWidth5x7,
-  wrapText5x7,
 } from "../render.js";
 import { FRIEND_1969_FRAME0 } from "./decode.test.js";
 
@@ -51,31 +48,16 @@ describe("render primitives", () => {
     expect(buf.data.reduce((a, b) => a + b, 0)).toBe(4);
   });
 
-  it("font glyphs are all 5x7 and drawText advances 6 px per char", () => {
-    for (const [ch, glyph] of Object.entries(FONT_5X7)) {
-      expect(glyph, ch).toHaveLength(GLYPH_HEIGHT);
-      for (const row of glyph) expect(row, `${ch} row`).toHaveLength(GLYPH_WIDTH);
-    }
+  it("blitPattern lights '#' cells only and clips at the edges", () => {
     const buf = createLcd(LCD_SIZE);
-    const end = drawText5x7(buf, "HI 42!", 1, 1);
-    expect(end).toBe(1 + 6 * 6);
-    expect(textWidth5x7("HI 42!")).toBe(35);
-    expect(buf.data.reduce((a, b) => a + b, 0)).toBeGreaterThan(0);
-    // lowercase draws the same as uppercase
-    const a = createLcd(LCD_SIZE);
-    const b = createLcd(LCD_SIZE);
-    drawText5x7(a, "nest", 0, 0);
-    drawText5x7(b, "NEST", 0, 0);
-    expect(a.data).toEqual(b.data);
-    // text past the right edge is clipped, never thrown
-    expect(() => drawText5x7(buf, "TOO LONG FOR THE LCD ROW", 80, 60)).not.toThrow();
+    blitPattern(buf, ["#.#", ".#.", "#.#"], 1, 1);
+    expect(getPixel(buf, 1, 1)).toBe(1);
+    expect(getPixel(buf, 2, 1)).toBe(0);
+    expect(getPixel(buf, 2, 2)).toBe(1);
+    expect(buf.data.reduce((a, b) => a + b, 0)).toBe(5);
+    expect(() => blitPattern(buf, ["###", "###"], 95, 63)).not.toThrow();
+    expect(() => blitPattern(buf, ["###"], -2, -2)).not.toThrow();
     expect(isBinary(buf.data)).toBe(true);
-  });
-
-  it("wrapText5x7 keeps lines within the width", () => {
-    const lines = wrapText5x7("A week of RF piles up. Claim it.", 96);
-    for (const l of lines) expect(textWidth5x7(l)).toBeLessThanOrEqual(96);
-    expect(lines.join(" ")).toBe("A week of RF piles up. Claim it.");
   });
 
   it("drawBar fills proportionally inside its outline", () => {
@@ -115,7 +97,6 @@ describe("render primitives", () => {
     const frame = asciiToFrame(FRIEND_1969_FRAME0);
     const data = renderLcd(LCD_SIZE, [
       { kind: "frame", frame, x: 40, y: 20, scale: 2 },
-      { kind: "text", text: "WOBBLE", x: 2, y: 2 },
       { kind: "bar", x: 2, y: 56, w: 40, h: 6, fill: 0.3 },
       { kind: "icon", name: "bowl", x: 86, y: 2 },
       { kind: "rect", x: 0, y: 0, w: 96, h: 64 },
@@ -128,7 +109,6 @@ describe("render primitives", () => {
     expect(data[63 * 96 + 95]).toBe(1);
     const again = renderLcd(LCD_SIZE, [
       { kind: "frame", frame, x: 40, y: 20, scale: 2 },
-      { kind: "text", text: "WOBBLE", x: 2, y: 2 },
       { kind: "bar", x: 2, y: 56, w: 40, h: 6, fill: 0.3 },
       { kind: "icon", name: "bowl", x: 86, y: 2 },
       { kind: "rect", x: 0, y: 0, w: 96, h: 64 },

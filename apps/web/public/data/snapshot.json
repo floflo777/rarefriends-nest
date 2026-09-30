@@ -1,0 +1,728 @@
+{
+  "blockNumber": 76481919,
+  "timestamp": 1790767937,
+  "totals": {
+    "burnedRf": 42650486.90625,
+    "burnEvents": 47020,
+    "byAction": {
+      "hardwire": {
+        "count": 10536,
+        "burnedRf": 24298945.5
+      },
+      "activate": {
+        "count": 2758,
+        "burnedRf": 7360783.85
+      },
+      "upgrade": {
+        "count": 5652,
+        "burnedRf": 6901894.21875
+      },
+      "promote": {
+        "count": 3459,
+        "burnedRf": 3661780.5
+      },
+      "unknown": {
+        "count": 24615,
+        "burnedRf": 427082.8375
+      }
+    }
+  },
+  "daily": [
+    {
+      "day": "2026-09-17",
+      "burnedRf": 26204153.9625,
+      "events": 9685
+    },
+    {
+      "day": "2026-09-18",
+      "burnedRf": 1991670,
+      "events": 11567
+    },
+    {
+      "day": "2026-09-19",
+      "burnedRf": 2441098.3875,
+      "events": 2302
+    },
+    {
+      "day": "2026-09-20",
+      "burnedRf": 898181.95,
+      "events": 5906
+    },
+    {
+      "day": "2026-09-21",
+      "burnedRf": 476150.58125,
+      "events": 356
+    },
+    {
+      "day": "2026-09-22",
+      "burnedRf": 626290.6125,
+      "events": 2248
+    },
+    {
+      "day": "2026-09-23",
+      "burnedRf": 2422383.775,
+      "events": 663
+    },
+    {
+      "day": "2026-09-24",
+      "burnedRf": 1161438.775,
+      "events": 3046
+    },
+    {
+      "day": "2026-09-25",
+      "burnedRf": 1411732.46875,
+      "events": 4885
+    },
+    {
+      "day": "2026-09-26",
+      "burnedRf": 975373.875,
+      "events": 512
+    },
+    {
+      "day": "2026-09-27",
+      "burnedRf": 1806362.29375,
+      "events": 687
+    },
+    {
+      "day": "2026-09-28",
+      "burnedRf": 932462.55,
+      "events": 4689
+    },
+    {
+      "day": "2026-09-29",
+      "burnedRf": 999281.15,
+      "events": 315
+    },
+    {
+      "day": "2026-09-30",
+      "burnedRf": 303906.525,
+      "events": 159
+    }
+  ],
+  "leaderboard": [
+    {
+      "owner": "0x1EcBF27dC1F809179B9ef2d382cd76ccBa21B6d2",
+      "burnedRf": 21650000,
+      "actions": 433,
+      "lastActionAt": 1789650423
+    },
+    {
+      "owner": "0x9ff84B91998dF96A6587DB8dDe8D4E47518107d6",
+      "burnedRf": 1668750,
+      "actions": 33,
+      "lastActionAt": 1790474812
+    },
+    {
+      "owner": "0x3405f96358a55c38598255F6BcEfD21CC8eaC678",
+      "burnedRf": 1356249,
+      "actions": 35,
+      "lastActionAt": 1790353414
+    },
+    {
+      "owner": "0x79D4687D77272A2347f0AaE383B650204D1A96c3",
+      "burnedRf": 1059320,
+      "actions": 31,
+      "lastActionAt": 1790619358
+    },
+    {
+      "owner": "0x97f290319734D0ce22215079417F3fE6A6439932",
+      "burnedRf": 831220,
+      "actions": 235,
+      "lastActionAt": 1790539001
+    },
+    {
+      "owner": "0xB5e1fb8f78a32877d7d302C136B75Dcb4820c28c",
+      "burnedRf": 762625,
+      "actions": 51,
+      "lastActionAt": 1790653341
+    },
+    {
+      "owner": "0xa9A4a3a03514e58CD59A13Bb54230d588Ff58F62",
+      "burnedRf": 656875,
+      "actions": 23,
+      "lastActionAt": 1790733043
+    },
+    {
+      "owner": "0x889DEdcDaf79CF86A4e320c815FD4dBAA3D7a761",
+      "burnedRf": 556250,
+      "actions": 11,
+      "lastActionAt": 1789858354
+    },
+    {
+      "owner": "0x016099f9c894285B4BCf82424A4dbDE44195ebBC",
+      "burnedRf": 395147.94375,
+      "actions": 262,
+      "lastActionAt": 1790620759
+    },
+    {
+      "owner": "0xbC1934f548417f79ab10138B57716Fbc7C25c177",
+      "burnedRf": 300000,
+      "actions": 6,
+      "lastActionAt": 1790492655
+    },
+    {
+      "owner": "0x30Df16cd7D612C5B25bEb0331486b127a42Ac371",
+      "burnedRf": 262505,
+      "actions": 7,
+      "lastActionAt": 1790611477
+    },
+    {
+      "owner": "0x082D41D9B0841Db0a1ec1e1960D7d230ad88670E",
+      "burnedRf": 259550,
+      "actions": 12,
+      "lastActionAt": 1789658834
+    },
+    {
+      "owner": "0x024AEF1375c1701693b2a0c8e8AD7BaDf0dCe493",
+      "burnedRf": 253080,
+      "actions": 8,
+      "lastActionAt": 1790609040
+    },
+    {
+      "owner": "0x6269cD92e1E2e3b47dca97c72818eF86CBC06c4e",
+      "burnedRf": 240000,
+      "actions": 5,
+      "lastActionAt": 1789664643
+    },
+    {
+      "owner": "0xb3007FF3c3F40bDF0126fEc7c8E43c3Fc50Ea813",
+      "burnedRf": 227651.875,
+      "actions": 96,
+      "lastActionAt": 1790704108
+    },
+    {
+      "owner": "0xb2F1a288E6Bf497e3B41adf23a4a89896069d1F6",
+      "burnedRf": 225000,
+      "actions": 10,
+      "lastActionAt": 1790695696
+    },
+    {
+      "owner": "0xee402489D83e2B22D496910F8C810D35a3Ad7B25",
+      "burnedRf": 220563.125,
+      "actions": 46,
+      "lastActionAt": 1790664143
+    },
+    {
+      "owner": "0x005CA423E0a2DFbbc36ed41683696C6CcF4Bc4bD",
+      "burnedRf": 212531.25,
+      "actions": 35,
+      "lastActionAt": 1789947606
+    },
+    {
+      "owner": "0x90bd5B3e0EB7Cc8D92dba8eEE3c855c374b2d990",
+      "burnedRf": 212500,
+      "actions": 5,
+      "lastActionAt": 1789655567
+    },
+    {
+      "owner": "0x1234eC8F7AF6EC6532e9670D757687c42B8ed7bd",
+      "burnedRf": 210763.45,
+      "actions": 38,
+      "lastActionAt": 1790687261
+    },
+    {
+      "owner": "0xE595Ed0eee63FE6ceB3e6b6770B9D826223a3737",
+      "burnedRf": 200000,
+      "actions": 4,
+      "lastActionAt": 1790460220
+    },
+    {
+      "owner": "0xfc3C9d6B39De195824825C0cFDF452378f16FFE8",
+      "burnedRf": 194593.75,
+      "actions": 5,
+      "lastActionAt": 1789940271
+    },
+    {
+      "owner": "0x694015a29D2Ff0cC88266Da405Ab5202a18eB621",
+      "burnedRf": 190625,
+      "actions": 3,
+      "lastActionAt": 1789753700
+    },
+    {
+      "owner": "0x8AD272Ac86c6C88683d9a60eb8ED57E6C304bB0C",
+      "burnedRf": 187812.5,
+      "actions": 9,
+      "lastActionAt": 1789661781
+    },
+    {
+      "owner": "0x26D7B4fe67f4601643304b5023b3CAF3A72E8504",
+      "burnedRf": 185000,
+      "actions": 5,
+      "lastActionAt": 1789649272
+    },
+    {
+      "owner": "0xA93399A2965672dD315a1Bd8816Fa94C50Ef4dd5",
+      "burnedRf": 173334.55,
+      "actions": 129,
+      "lastActionAt": 1790608616
+    },
+    {
+      "owner": "0x08B986596E937DF0A9b28C28605A69622d08d2df",
+      "burnedRf": 159970.5,
+      "actions": 53,
+      "lastActionAt": 1790317666
+    },
+    {
+      "owner": "0x6186290B28D511bFF971631c916244A9fC539cfE",
+      "burnedRf": 151075,
+      "actions": 10,
+      "lastActionAt": 1790758267
+    },
+    {
+      "owner": "0xBFA2776f36b12FE35Ba9EBd0112AFC7D1020eddD",
+      "burnedRf": 150000,
+      "actions": 3,
+      "lastActionAt": 1790641790
+    },
+    {
+      "owner": "0x0CF669Fc92960FB55666dd6E8002643dcF145d5B",
+      "burnedRf": 140188,
+      "actions": 10,
+      "lastActionAt": 1790490812
+    },
+    {
+      "owner": "0x1D3E52C1217458697291A6839C8aA3669F60239E",
+      "burnedRf": 138660.15625,
+      "actions": 39,
+      "lastActionAt": 1790759782
+    },
+    {
+      "owner": "0x591F8a2deCC1c86cce0c7Bea22Fa921c2c72fb95",
+      "burnedRf": 130313.4875,
+      "actions": 159,
+      "lastActionAt": 1790718131
+    },
+    {
+      "owner": "0x819FbB2d9880d23792fD9D1CDE4C153BF9956344",
+      "burnedRf": 125312.5,
+      "actions": 8,
+      "lastActionAt": 1790685658
+    },
+    {
+      "owner": "0x88aB54f26C99f91DD6027147B0B0a67742f22248",
+      "burnedRf": 125004.5,
+      "actions": 8,
+      "lastActionAt": 1790712638
+    },
+    {
+      "owner": "0x5512144047c2d55297c8470B93E8Da87864617Cd",
+      "burnedRf": 123046.025,
+      "actions": 61,
+      "lastActionAt": 1790738766
+    },
+    {
+      "owner": "0x1f8a8aC54244E4016a376152b2F92D467552FA7B",
+      "burnedRf": 121501,
+      "actions": 11,
+      "lastActionAt": 1790301584
+    },
+    {
+      "owner": "0xf74c487e7d9ffEBdcFB3189118d74b0b8591dC83",
+      "burnedRf": 118750,
+      "actions": 3,
+      "lastActionAt": 1790532360
+    },
+    {
+      "owner": "0x7951E803Fdc4EF54e0Cc91f5b4F12c176eCcddea",
+      "burnedRf": 116411.875,
+      "actions": 38,
+      "lastActionAt": 1790626852
+    },
+    {
+      "owner": "0xd603eb93790cFd87dE8677fe83cE4Aab11c52076",
+      "burnedRf": 113125,
+      "actions": 7,
+      "lastActionAt": 1789830960
+    },
+    {
+      "owner": "0x78136D0DD04DFCdd98D9DebCC6886f10091139f6",
+      "burnedRf": 112500.5,
+      "actions": 4,
+      "lastActionAt": 1789677680
+    },
+    {
+      "owner": "0x0f2e136Ff215a05a65DD5E8765C7dd49Dbb19517",
+      "burnedRf": 112000.5,
+      "actions": 5,
+      "lastActionAt": 1790733922
+    },
+    {
+      "owner": "0x6165536Dd77141D095e10fE7477D5503e0a93467",
+      "burnedRf": 108720.625,
+      "actions": 15,
+      "lastActionAt": 1790728488
+    },
+    {
+      "owner": "0xe289De90C67557531588D7434bd8c7f779A80CC3",
+      "burnedRf": 107500,
+      "actions": 3,
+      "lastActionAt": 1789770550
+    },
+    {
+      "owner": "0xd8CaDfD2fBb21916Be26bf24c05e41a826c53849",
+      "burnedRf": 106455,
+      "actions": 12,
+      "lastActionAt": 1790517727
+    },
+    {
+      "owner": "0x8e3435Ad7C1183BC0e34f9Ec34ea3423182E1c67",
+      "burnedRf": 106441.1,
+      "actions": 30,
+      "lastActionAt": 1790738790
+    },
+    {
+      "owner": "0x9AC0389fD995d601f1F5CE0833f2372a6684e980",
+      "burnedRf": 105746.3125,
+      "actions": 17,
+      "lastActionAt": 1790241971
+    },
+    {
+      "owner": "0x137d9174D3bd00F2153DcC0Fe7AF712d3876a71E",
+      "burnedRf": 105450,
+      "actions": 5,
+      "lastActionAt": 1790622107
+    },
+    {
+      "owner": "0xF5fDDb64c566F2709b68378fD0D0092cf947D931",
+      "burnedRf": 105000.5,
+      "actions": 4,
+      "lastActionAt": 1789763777
+    },
+    {
+      "owner": "0xFaaaF679cF57DAb328EC281e7e821d7A34bd559a",
+      "burnedRf": 104606.5,
+      "actions": 9,
+      "lastActionAt": 1790435388
+    },
+    {
+      "owner": "0xb67d58CfFaE63A95fB380b952E65B1A8eac44D0b",
+      "burnedRf": 103950,
+      "actions": 24,
+      "lastActionAt": 1790707523
+    },
+    {
+      "owner": "0x5Ed35A54d2CfeB531c9070ed4dFc27C305344aDA",
+      "burnedRf": 100989.375,
+      "actions": 12,
+      "lastActionAt": 1789840833
+    },
+    {
+      "owner": "0x210a80C89c5Aa7b12eC10fd7BeFd8747D21daf4F",
+      "burnedRf": 100000,
+      "actions": 2,
+      "lastActionAt": 1790528073
+    },
+    {
+      "owner": "0x2e92258A8947A7b762778101b488B0c4F739fe34",
+      "burnedRf": 100000,
+      "actions": 2,
+      "lastActionAt": 1789934724
+    },
+    {
+      "owner": "0x8FABe392DF90b06ad610C33F41bB1Abd78A5Fc20",
+      "burnedRf": 100000,
+      "actions": 2,
+      "lastActionAt": 1789655525
+    },
+    {
+      "owner": "0xdA664e32AF82d1F96933acEcdAcB9395977EED64",
+      "burnedRf": 100000,
+      "actions": 2,
+      "lastActionAt": 1789999561
+    },
+    {
+      "owner": "0xEE9060af383d4BB3c63923fF3abDBD8F00857aaf",
+      "burnedRf": 100000,
+      "actions": 2,
+      "lastActionAt": 1790086323
+    },
+    {
+      "owner": "0xBF648796ffE450d3f47cbF7Cd2b74f8c204dCA29",
+      "burnedRf": 87756.3,
+      "actions": 55,
+      "lastActionAt": 1790530205
+    },
+    {
+      "owner": "0x4109266acaC7Bc28c754884920b059E016DDAf41",
+      "burnedRf": 84392.5,
+      "actions": 27,
+      "lastActionAt": 1790690038
+    },
+    {
+      "owner": "0xD8450994c819AB1e4BE34CF78CfA04755365da9B",
+      "burnedRf": 84199.5,
+      "actions": 16,
+      "lastActionAt": 1790481638
+    },
+    {
+      "owner": "0x057291BD078F28687009ec4f17672adf6FE88423",
+      "burnedRf": 82145.05,
+      "actions": 22,
+      "lastActionAt": 1790568860
+    },
+    {
+      "owner": "0x30e1C8eC2935bF979A573c44ceB12Af8D51e094E",
+      "burnedRf": 80000,
+      "actions": 4,
+      "lastActionAt": 1790669713
+    },
+    {
+      "owner": "0x4746d819A6776Ccc0DCdF7021908C490034891B0",
+      "burnedRf": 78541.34375,
+      "actions": 29,
+      "lastActionAt": 1790719804
+    },
+    {
+      "owner": "0xC02DB0f57Ed77c6142FBaABa0AD12334e0a48361",
+      "burnedRf": 75937.5,
+      "actions": 15,
+      "lastActionAt": 1789741579
+    },
+    {
+      "owner": "0x835d664C144a455F31460322a0b3f85A07925A77",
+      "burnedRf": 75908.125,
+      "actions": 13,
+      "lastActionAt": 1790657011
+    },
+    {
+      "owner": "0xe7860c5b9F09e2cF760d16b50cf6675b44c1B73e",
+      "burnedRf": 75187.5,
+      "actions": 9,
+      "lastActionAt": 1790337071
+    },
+    {
+      "owner": "0xa81725Fae8bB3930a95deBb0aDeaA184B5E9Cc10",
+      "burnedRf": 74950,
+      "actions": 4,
+      "lastActionAt": 1790665790
+    },
+    {
+      "owner": "0x169f3B21e9efb563D55F3a0572BBFD7E28139389",
+      "burnedRf": 70000.05,
+      "actions": 3,
+      "lastActionAt": 1789690609
+    },
+    {
+      "owner": "0x20335C504A4f0D8Db934e9f77a67b55E6AE8e1e1",
+      "burnedRf": 70000,
+      "actions": 2,
+      "lastActionAt": 1790619855
+    },
+    {
+      "owner": "0xB08802cdFa22364B036b02E0Ffb25A9E415fbB31",
+      "burnedRf": 70000,
+      "actions": 2,
+      "lastActionAt": 1790443252
+    },
+    {
+      "owner": "0xF9a567638D25d56b7dBFecDEd5b3301C12168AD3",
+      "burnedRf": 70000,
+      "actions": 2,
+      "lastActionAt": 1789661582
+    },
+    {
+      "owner": "0xa1b1A631c0c1dD4899deC7C343Ee59aD21867803",
+      "burnedRf": 68450,
+      "actions": 8,
+      "lastActionAt": 1790541405
+    },
+    {
+      "owner": "0x9935342209f548A2abE40E7815c7c6b386F06eeb",
+      "burnedRf": 67961.10625,
+      "actions": 85,
+      "lastActionAt": 1790362862
+    },
+    {
+      "owner": "0x313eD824d3E3cc004a646bFfE27e9CfcF80258Fa",
+      "burnedRf": 65512.5,
+      "actions": 31,
+      "lastActionAt": 1790727117
+    },
+    {
+      "owner": "0x913105f2d2BFb8392F7845EF79E0C2C62f2755dF",
+      "burnedRf": 63768.75,
+      "actions": 22,
+      "lastActionAt": 1790301048
+    },
+    {
+      "owner": "0x3E99221C051B98F0e9b6F73848492e5264Ebc55D",
+      "burnedRf": 63612.6875,
+      "actions": 33,
+      "lastActionAt": 1789828322
+    },
+    {
+      "owner": "0x60CED65A51922C9560d72631F658Db0df85BFf1f",
+      "burnedRf": 62457.03125,
+      "actions": 17,
+      "lastActionAt": 1789853587
+    },
+    {
+      "owner": "0x51ec5e1b8B3C4C6baE49619e657F94C4AD577b45",
+      "burnedRf": 60000,
+      "actions": 5,
+      "lastActionAt": 1790477206
+    },
+    {
+      "owner": "0x1794FD7510B1E3C6a2E193c2C1E6d74ff2C47572",
+      "burnedRf": 60000,
+      "actions": 3,
+      "lastActionAt": 1789723436
+    },
+    {
+      "owner": "0x00FB2499403aFeCcd48F0Fb29Da41CdE8c113D4B",
+      "burnedRf": 59322.0625,
+      "actions": 20,
+      "lastActionAt": 1789722174
+    },
+    {
+      "owner": "0x6A90A22b8af50c0c59E038f57596C5eCbdb695EE",
+      "burnedRf": 58437.5,
+      "actions": 2,
+      "lastActionAt": 1790542161
+    },
+    {
+      "owner": "0xcf1a24ed0048646bdCe4FD05deB6f800e4938939",
+      "burnedRf": 56055,
+      "actions": 8,
+      "lastActionAt": 1790077608
+    },
+    {
+      "owner": "0x655C32345baB34242d40b6Cc6Be28E83BD122833",
+      "burnedRf": 55500,
+      "actions": 3,
+      "lastActionAt": 1790761530
+    },
+    {
+      "owner": "0xaa8BDB60eE28E7616Bfe4867f58BfE4EDF858271",
+      "burnedRf": 55080,
+      "actions": 7,
+      "lastActionAt": 1790241110
+    },
+    {
+      "owner": "0xd6542705C322d46AC93feccF9cc40b0794a1af1d",
+      "burnedRf": 55004.5,
+      "actions": 7,
+      "lastActionAt": 1790653623
+    },
+    {
+      "owner": "0x8ab1EF55F1868040336fbe825a88F41014C062bE",
+      "burnedRf": 55000.5,
+      "actions": 3,
+      "lastActionAt": 1790619442
+    },
+    {
+      "owner": "0xc659fd78a395d70EC69Ff034b4378A712e7edB64",
+      "burnedRf": 55000,
+      "actions": 2,
+      "lastActionAt": 1790546272
+    },
+    {
+      "owner": "0x9516E80ba79b97D5085eA4553Df9E35022B1a656",
+      "burnedRf": 54736.25,
+      "actions": 14,
+      "lastActionAt": 1790656483
+    },
+    {
+      "owner": "0xfC5d616cb1Bd0B4497e05d2d12171c4e917E365f",
+      "burnedRf": 53126.25,
+      "actions": 10,
+      "lastActionAt": 1789762011
+    },
+    {
+      "owner": "0x61224478d41C0f59512fEB01dc69432806D3B8aa",
+      "burnedRf": 52531.25,
+      "actions": 6,
+      "lastActionAt": 1789804831
+    },
+    {
+      "owner": "0x4ee8FD730386DbcdE705181EB10eFc1dB544d37F",
+      "burnedRf": 51180,
+      "actions": 6,
+      "lastActionAt": 1789743219
+    },
+    {
+      "owner": "0x0BeDa5116cD204c428379b5D852DADc04F3Bc384",
+      "burnedRf": 51000,
+      "actions": 3,
+      "lastActionAt": 1789662091
+    },
+    {
+      "owner": "0x84f9aeCa6F9eCacA340Bd9535B4f642EE74360Ae",
+      "burnedRf": 51000,
+      "actions": 3,
+      "lastActionAt": 1789667229
+    },
+    {
+      "owner": "0xE540a8D94bd379C4d9c0478c8fe9f7Fe7F0B06e1",
+      "burnedRf": 50790,
+      "actions": 12,
+      "lastActionAt": 1790429337
+    },
+    {
+      "owner": "0x39308E4c94226Ae9Ee63DCcbBE1f1966BB6Bf90C",
+      "burnedRf": 50768,
+      "actions": 8,
+      "lastActionAt": 1790472153
+    },
+    {
+      "owner": "0x82F885F1aDCA2175C7F62DcB85dB83289C03F69C",
+      "burnedRf": 50755,
+      "actions": 4,
+      "lastActionAt": 1789750124
+    },
+    {
+      "owner": "0x1592221ff5c0397a563d58D7F3E6c95dd444b2CD",
+      "burnedRf": 50747,
+      "actions": 14,
+      "lastActionAt": 1789727605
+    },
+    {
+      "owner": "0x2f22D80612485851a5c182CcE59CD482eb3263e9",
+      "burnedRf": 50550,
+      "actions": 3,
+      "lastActionAt": 1790284558
+    },
+    {
+      "owner": "0x628eA111406A68f4EC00cA3587843Ef0058BA6f3",
+      "burnedRf": 50510.05,
+      "actions": 5,
+      "lastActionAt": 1790539559
+    },
+    {
+      "owner": "0x0f053e31010FD346f3f7c59d71A19566B41CabD4",
+      "burnedRf": 50502.35,
+      "actions": 13,
+      "lastActionAt": 1790550175
+    },
+    {
+      "owner": "0x587025f3686195ad6A93eF8C85c37391F1DA72BD",
+      "burnedRf": 50500,
+      "actions": 2,
+      "lastActionAt": 1790194749
+    }
+  ],
+  "hardwired": {
+    "total": 62336,
+    "byGeneration": {
+      "1": 522,
+      "2": 335,
+      "3": 1028,
+      "4": 4220,
+      "5": 15527,
+      "6": 40704
+    },
+    "wallets": 3739,
+    "firstBlock": 64590957
+  },
+  "genesis": {
+    "activated": 495,
+    "inactive": 529,
+    "reserveHeld": 411
+  },
+  "coverage": {
+    "fromBlock": 65356920,
+    "toBlock": 76481919,
+    "complete": false,
+    "partial": true
+  }
+}
