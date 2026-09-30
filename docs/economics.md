@@ -51,7 +51,7 @@ Formula: break-even weeks = cost ÷ (Δweight ÷ totalWeight × weekly stream). 
 
 - **Daily reason to open it:** the pet is hungry when rewards pile up (a real, growing number); feeding is one tap and lands real RF/WETH in the pet's wallet.
 - **Something to want:** the next generation (visible on the on-chain art: more land), the next tier (visible in weight and weekly income), the next pup, the next rank.
-- **Something to compare:** Nest Rank orders households by real RF burned; a care streak is computed from chain events. Nobody can fake either.
+- **Something to compare:** Nest Rank orders households by real RF burned, indexed from the chain. Nobody can fake it.
 - **Something kept:** every RF spent bought permanent weight in an NFT that carries its own wallet and sells with it. Nothing is spent "into the game".
 - **Nothing hidden:** the Steward's break-even is on every confirmation; the burn and reward halves are on every confirmation.
 

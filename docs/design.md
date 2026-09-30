@@ -40,7 +40,7 @@ Open Nest daily. The handheld shows your Friend:
 
 Household = every Friend the wallet owns. Pups = Friends hatched from eggs. Raising a pup through generations is the mid-game; a maxed household is the end-game.
 
-Nest Rank: leaderboard of households by real RF burned (indexed from RF `Transfer(from, 0x0)` events emitted by ActivationManager, attributed to the transaction sender and function selector). Care streak: consecutive UTC days with a claim or care action on the household, computed from chain events. No local state anywhere. Nothing can be faked.
+Nest Rank: leaderboard of households by real RF burned (indexed from RF `Transfer(from, 0x0)` events emitted by ActivationManager, attributed to the transaction sender and function selector). No local state anywhere. Nothing can be faked.
 
 Every paid action opens a confirmation showing exact RF cost, RF burned (50%), RF to rewards (50%), and the Steward's break-even for that action. Then the wallet signs. Nest never holds a key.
 
@@ -49,7 +49,7 @@ Every paid action opens a confirmation showing exact RF cost, RF burned (50%), R
 Everything the pet does is a pure function of `(family, seed, vitals, time)`:
 
 - `familyOf(id)` (9 families) → temperament: how quickly hunger shows, idle habits, what it says.
-- `seedOf(id)` → name, favourite hour, one secret habit revealed after a 7-day streak.
+- `seedOf(id)` → name, favourite hour, one secret habit.
 - vitals → mood state: content, hungry, restless (rewards piling up), proud (recent promotion), sleepy, thrifty (savings grew).
 - Sprite: the NFT's canonical 64 on-chain frames from the families registry (`frames(family, seed)`), rendered 1-bit on a 96×64 LCD. Colour mode shows the frames with the original palette and the on-chain `tokenURI` scene unaltered.
 
