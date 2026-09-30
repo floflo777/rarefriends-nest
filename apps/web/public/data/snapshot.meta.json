@@ -1,85 +1,85 @@
 {
-  "generatedAt": "2026-09-30T13:26:09.970Z",
-  "startedAt": "2026-09-30T12:45:42.603Z",
-  "durationMs": 2427367,
-  "status": "running",
+  "generatedAt": "2026-09-30T18:11:38.331Z",
+  "startedAt": "2026-09-30T18:11:33.726Z",
+  "durationMs": 4605,
+  "status": "done",
   "coverage": {
     "fromBlock": 0,
-    "toBlock": 76481919,
+    "toBlock": 76720483,
     "complete": true,
     "partial": false
   },
   "run": {
-    "mode": "reresolve",
-    "fromBlock": 1,
-    "toBlock": 0,
-    "head": 76525652,
-    "windowsFlushed": 0,
-    "newBurnRecords": 0,
+    "mode": "forward",
+    "fromBlock": 76719030,
+    "toBlock": 76720483,
+    "head": 76720483,
+    "windowsFlushed": 1,
+    "newBurnRecords": 1,
     "newForeignBurns": 0,
     "rpc": {
-      "requests": 2551,
-      "items": 50781,
-      "retries": 137,
-      "rateLimited": 137,
-      "paceFactor": 1.8883386230143255
+      "requests": 14,
+      "items": 14,
+      "retries": 0,
+      "rateLimited": 0,
+      "paceFactor": 1
     }
   },
   "reconciliation": {
-    "rfTotalSupplyWei": "947731223066837858865375706",
-    "rfTotalSupplyRf": 947731223.0668379,
+    "rfTotalSupplyWei": "947292913766837858865375706",
+    "rfTotalSupplyRf": 947292913.7668378,
     "initialSupplyRf": 1024000000,
-    "impliedBurnedRf": 76268776.9331621,
-    "indexedBurnedRf": 76265332.39375,
+    "impliedBurnedRf": 76707086.23316216,
+    "indexedBurnedRf": 76706967.69375,
     "foreignBurnedRf": 118.539412,
-    "indexedPlusForeignRf": 76265450.933162,
-    "gapRf": 3444.5394120961428,
-    "gapPct": 0.004516316572264892
+    "indexedPlusForeignRf": 76707086.233162,
+    "gapRf": 118.53941217064857,
+    "gapPct": 0.00015453515182460597
   },
   "classification": {
     "unresolvedRecords": 0,
-    "receiptChecked": 0,
-    "stillUnknown": 25206,
+    "receiptChecked": 25320,
+    "stillUnknown": 153,
     "unknownSelectors": {
       "0x1fad948c": {
-        "count": 244,
-        "burnedRf": 583966.275,
-        "action": "unknown"
+        "count": 250,
+        "burnedRf": 584446.325,
+        "action": "hardwire"
       },
       "0x85e3c463": {
         "count": 14191,
         "burnedRf": 163970,
-        "action": "unknown"
+        "action": "hardwire"
       },
       "0xf204bdb9": {
         "count": 10,
         "burnedRf": 5998.5,
-        "action": "unknown"
+        "action": "promote"
       },
       "0xe4959c50": {
         "count": 5450,
         "burnedRf": 2725,
-        "action": "unknown"
+        "action": "hardwire"
       },
       "0xc53122d5": {
         "count": 4500,
         "burnedRf": 2250,
-        "action": "unknown"
+        "action": "hardwire"
       },
       "0x60808060": {
         "count": 478,
         "burnedRf": 239,
-        "action": "unknown"
+        "action": "hardwire"
       },
       "0xe08e3f41": {
-        "count": 333,
-        "burnedRf": 166.5,
-        "action": "unknown"
+        "count": 441,
+        "burnedRf": 220.5,
+        "action": "hardwire"
       }
     },
     "viaNest": {
-      "burnEvents": 0,
-      "burnedRf": 0
+      "burnEvents": 5,
+      "burnedRf": 17.5
     }
   },
   "foreignBurns": {
@@ -105,7 +105,7 @@
     }
   },
   "genesis": {
-    "blockNumber": 76525652,
+    "blockNumber": 76720483,
     "unreadable": 0,
     "inactiveByOwner": {
       "0xA850B2499c064900EfF341745807e1cB0d71a52b": 411,
@@ -113,6 +113,8 @@
       "0x8AF2aB684FDda4a43a1db60D7E2B68d9F80A05cE": 5,
       "0xdB585820d3B56dBE452b2D7774E7852DBD0976Ea": 5,
       "0x720D7b9FcCc403212B7746fcf98E8461e411a81d": 4,
+      "0x97f290319734D0ce22215079417F3fE6A6439932": 3,
+      "0x28aAb2bb503Ec43cE99A8Bf9Ea22c72AB39a420f": 2,
       "0x555C4f74be722FaF6Ba9b6005Ae1C2eE1a21752a": 2,
       "0x01467c420df8d9556fe5DbbF02b0c25C42226558": 1,
       "0x01859354D54a0bd7Ea6234Cd46163a926e74C641": 1,
@@ -132,10 +134,9 @@
       "0x1531b8c20CDBd1463C8935cB32F1935cdB5cc255": 1,
       "0x15b74c81e56e5BF052B76B53B5a948339DE40D39": 1,
       "0x250DC85178fB6859e9eE02c925d46AAb946a55E7": 1,
-      "0x28aAb2bb503Ec43cE99A8Bf9Ea22c72AB39a420f": 1,
       "0x29d124D5b9434a56CeC9257B9617F2b43Fffcc60": 1,
-      "0x2B65F85E81Eec21EDa840B8f9c4FD657F917B092": 1,
       "0x2C4109E0F6aA46986c66DDCd66c6c7c80CEbB4d7": 1,
+      "0x30Df16cd7D612C5B25bEb0331486b127a42Ac371": 1,
       "0x34aA3F359A9D614239015126635CE7732c18fDF3": 1,
       "0x3b0630a286102276E05181A25fFd1D0e23a39062": 1,
       "0x3DA406dd5A2C8201658d0fe66D3b46aB4A0a9c7B": 1,
@@ -200,13 +201,13 @@
       "0xEB197B76F320c854bC18DBF62bD33A28663abEee": 1,
       "0xeB4c5c24468C3e666D01257B76A73326411b7928": 1,
       "0xeBf6B0866Ac124f39647a6FB1A74E5eAb3645aa0": 1,
-      "0xef77C2B792795553259b82FB883de9D8C5e3FFb2": 1,
       "0xf0D6999725115E3EAd3D927Eb3329D63AFAEC09b": 1,
       "0xF245b710f00a1106Df9c129Bc0352680B1b1D988": 1,
       "0xf31B40DbcBa528f2cD6Ea9D65058BE320175D259": 1,
       "0xF703FD64093B50797aBDc9E450632240FA2bA5D4": 1,
       "0xF9b6469fac02664B0E16E40B1c3CE404c7F50077": 1,
       "0xfbA2C2bBF977eDA19Ad819Bb46787F4C91d1fFaD": 1,
+      "0xfc22E2Db16C78E22C647CF6C531710590986f209": 1,
       "0xFc7af206E1a69F7886fB47fF8e1287fFf4406D03": 1,
       "0xfe213fb3Ea607FC81171cF78C31EfccE4529a2FF": 1,
       "0xff71512c84096F55cdF5C5f3D3c6AcE99b56feF0": 1
@@ -214,13 +215,13 @@
   },
   "hardwired": {
     "fromBlock": 64590957,
-    "toBlock": 76525652
+    "toBlock": 76720483
   },
   "cache": {
-    "burns": "/home/hyperliquid/projects/rarefriends-nest/tools/indexer/cache/burns.jsonl",
-    "foreignBurns": "/home/hyperliquid/projects/rarefriends-nest/tools/indexer/cache/foreign-burns.jsonl",
-    "hardwired": "/home/hyperliquid/projects/rarefriends-nest/tools/indexer/cache/hardwired.json",
-    "state": "/home/hyperliquid/projects/rarefriends-nest/tools/indexer/cache/state.json",
-    "burnRecords": 80706
+    "burns": "/home/florent/Desktop/Projects/crypto/rarefriends_hackathon/tmp/vibeathon/rarefriends-nest/tools/indexer/cache/burns.jsonl",
+    "foreignBurns": "/home/florent/Desktop/Projects/crypto/rarefriends_hackathon/tmp/vibeathon/rarefriends-nest/tools/indexer/cache/foreign-burns.jsonl",
+    "hardwired": "/home/florent/Desktop/Projects/crypto/rarefriends_hackathon/tmp/vibeathon/rarefriends-nest/tools/indexer/cache/hardwired.json",
+    "state": "/home/florent/Desktop/Projects/crypto/rarefriends_hackathon/tmp/vibeathon/rarefriends-nest/tools/indexer/cache/state.json",
+    "burnRecords": 80910
   }
 }

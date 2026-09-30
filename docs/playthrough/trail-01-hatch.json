@@ -1,0 +1,144 @@
+{
+  "action": "HATCH",
+  "sent": [
+    {
+      "at": "2026-09-30T18:04:09.169Z",
+      "to": "0x0779369854d3EcdEA927206718FFD7730C67B71f",
+      "data": "0x095ea7b3000000000000000000000000d4a35e11318e3679168d409184b788bcf9f283ac0000000000000000000000000000000000000000000000008ac7230489e800004e4553540001",
+      "value": "0x0",
+      "hash": "0xc63d9a3427e173d8ae447311c697b760781ed3d9c1d0c1fb6590b606fd7efbb8"
+    },
+    {
+      "at": "2026-09-30T18:04:11.645Z",
+      "to": "0xd4a35e11318e3679168d409184b788bcf9f283ac",
+      "data": "0x9f68c98a00000000000000000000000000000000000000000000000000000000000000054e4553540001",
+      "value": "0x0",
+      "hash": "0xf1363c2a7bf2ebd709957d6155118b90595ed82caab2891f27393cb6af73dc34"
+    }
+  ],
+  "trail": [
+    {
+      "k": "care",
+      "lcd": [
+        "CARE",
+        "HATCH #344030 10 RF",
+        "BACK",
+        "{",
+        "}",
+        "@ SELECT"
+      ]
+    },
+    {
+      "k": "care-focused",
+      "lcd": [
+        "CARE",
+        "> HATCH #344030 10 RF",
+        "BACK",
+        "@ OK"
+      ]
+    },
+    {
+      "k": "cursor",
+      "lcd": [
+        "CARE",
+        "> HATCH #344030 10 RF",
+        "BACK",
+        "@ OK"
+      ]
+    },
+    {
+      "k": "confirm",
+      "lcd": [
+        "HATCH EGG #344030",
+        "→ GEN-5 10 RF",
+        "COST 10 RF",
+        "BURN 5 REW 5",
+        "+WEIGHT 12",
+        "BREAK-EVEN 4,579 WK",
+        "THIS IS A COLLECTOR'S",
+        "SPEND, NOT A YIELD",
+        "PLAY.",
+        "[ NO ]",
+        "[ YES ]",
+        "SELECTED NO"
+      ]
+    },
+    {
+      "k": "confirm-yes",
+      "lcd": [
+        "HATCH EGG #344030",
+        "→ GEN-5 10 RF",
+        "COST 10 RF",
+        "BURN 5 REW 5",
+        "+WEIGHT 12",
+        "BREAK-EVEN 4,579 WK",
+        "THIS IS A COLLECTOR'S",
+        "SPEND, NOT A YIELD",
+        "PLAY.",
+        "[ NO ]",
+        "[ YES ]",
+        "SELECTED YES"
+      ]
+    },
+    {
+      "k": "t+0s",
+      "lcd": [
+        "HATCH EGG #344030",
+        "OK",
+        "GAS 399,827",
+        "2 TX TO SIGN",
+        "{ BACK",
+        "@ SIGN"
+      ]
+    },
+    {
+      "k": "t+1s",
+      "lcd": [
+        "HATCH EGG #344030",
+        "PENDING",
+        "TX 1/2",
+        "0XC63D9A34..7EFBB8"
+      ]
+    },
+    {
+      "k": "t+3s",
+      "lcd": [
+        "HATCH EGG #344030",
+        "SIGN IN WALLET",
+        "TX 2/2",
+        "HARDWIRE(5): 10 RF, HALF",
+        "BURNED, THE EGG BECOMES",
+        "A GEN-5 FRIEND"
+      ]
+    },
+    {
+      "k": "t+3s",
+      "lcd": [
+        "HATCH EGG #344030",
+        "PENDING",
+        "TX 2/2",
+        "0XF1363C2A..73DC34"
+      ]
+    },
+    {
+      "k": "t+5s",
+      "lcd": [
+        "HATCH EGG #344030",
+        "DONE",
+        "TX 0XF1363C2A..73DC34",
+        "LINK UNDER THE SCREEN",
+        "[ OK ]"
+      ]
+    },
+    {
+      "k": "after",
+      "lcd": [
+        "HATCH EGG #344030",
+        "DONE",
+        "TX 0XF1363C2A..73DC34",
+        "LINK UNDER THE SCREEN",
+        "[ OK ]"
+      ]
+    }
+  ]
+}

@@ -100,6 +100,8 @@ function makeClient(url: string, batchSize: number, timeoutMs: number): Client {
     chain: robinhoodChain,
     transport: http(url, {
       batch: { batchSize, wait: 16 },
+      // A batch of 20 receipts of busy multicall transactions can exceed viem's 10 MB default.
+      maxResponseBodySize: 64 * 1024 * 1024,
       retryCount: 0, // retries are handled by Rpc.call so they are throttled and logged
       timeout: timeoutMs,
       ...(DEBUG ? { onFetchRequest: debugRequest } : {}),

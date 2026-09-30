@@ -22,7 +22,7 @@ Facts read from Robinhood Chain on 2026-09-30 (block ~76.46M), reproducible with
 Two consequences that shape the game:
 
 1. **65% of all Friends are Gen-6 pups that nobody raised.** Promoting one Gen-6 to Gen-5 costs 9 RF and burns 4.5. The raise ladder (6→1) is 100,000 RF per Friend, 50,000 burned. That ladder is the largest RF sink that exists, and it is unused.
-2. **Yield alone will not move Generations holders.** At today's stream (8,547,984 RF over total weight 1,068,713,094), every Generations action pays for itself in 61 to 114 weeks: 61.0 for a Gen-1 tier 3→4 upgrade, 65.8 for a Gen-1 tier 0→1, 106.4 for a Gen-6 tier 0→1, 113.7 for hardwiring a Gen-6. A Genesis activation pays for itself in 6.3 weeks. Nest says so, out loud, in the Steward. The reasons to raise a Friend are the reasons people raise pets: it grows (on-chain art gains land with generation), it earns (weight ×~11 per generation), it is yours forever (NFT + wallet), and everyone can see what you did (rank by real burn).
+2. **Yield alone will not move Generations holders.** At the stream that ran until 2026-09-30 18:07 UTC (8,547,984 RF over total weight 1,068,713,094), every Generations action paid for itself in 61 to 114 weeks and a Genesis activation in 6.3 weeks. At the stream that started then (193,586 RF), the same actions take 2,700 to 5,000 weeks and a Genesis activation 275 weeks (docs/economics.md). Nest reads the stream live and says so, out loud, on every confirmation. The reasons to raise a Friend are the reasons people raise pets: it grows (on-chain art gains land with generation), it earns (weight ×~11 per generation), it is yours forever (NFT + wallet), and everyone can see what you did (rank by real burn).
 
 ## The player loop
 

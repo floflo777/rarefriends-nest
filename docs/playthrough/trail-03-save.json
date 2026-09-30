@@ -1,0 +1,115 @@
+{
+  "action": "SAVE",
+  "sent": [
+    {
+      "at": "2026-09-30T18:06:32.299Z",
+      "to": "0x0779369854d3EcdEA927206718FFD7730C67B71f",
+      "data": "0xa9059cbb000000000000000000000000484576b724c2084c9b58db1d1855829fde47aeb6000000000000000000000000000000000000000000000001bb60f512e9e9e81c4e4553540001",
+      "value": "0x0",
+      "hash": "0x6936aa89c5506e1123180ab0db3429789c7eb781671c83ef85e740b73d222be9"
+    }
+  ],
+  "trail": [
+    {
+      "k": "care",
+      "lcd": [
+        "CARE",
+        "MISMIR",
+        "TRAIN #344030 7.5 RF",
+        "RAISE #344030 90 RF",
+        "HATCH #344034 10 RF",
+        "SAVE 31.95 RF FREE",
+        "FEED #344030 · TINY",
+        "BACK",
+        "{",
+        "}",
+        "@ SELECT"
+      ]
+    },
+    {
+      "k": "care-focused",
+      "lcd": [
+        "CARE",
+        "MISMIR",
+        "> TRAIN #344030 7.5 RF",
+        "RAISE #344030 90 RF",
+        "HATCH #344034 10 RF",
+        "SAVE 31.95 RF FREE",
+        "FEED #344030 · TINY",
+        "BACK",
+        "@ OK"
+      ]
+    },
+    {
+      "k": "cursor",
+      "lcd": [
+        "CARE",
+        "MISMIR",
+        "TRAIN #344030 7.5 RF",
+        "RAISE #344030 90 RF",
+        "HATCH #344034 10 RF",
+        "> SAVE 31.95 RF FREE",
+        "FEED #344030 · TINY",
+        "BACK",
+        "@ OK"
+      ]
+    },
+    {
+      "k": "confirm",
+      "lcd": [
+        "SAVE 31.95 RF",
+        "→ #344030 WALLET",
+        "COST FREE",
+        "BURN 0 REW 0",
+        "+WEIGHT 0",
+        "BREAK-EVEN -",
+        "NOT A SPEND: THE RF",
+        "STAYS IN A WALLET YOU",
+        "CONTROL.",
+        "[ NO ]",
+        "[ YES ]",
+        "SELECTED YES"
+      ]
+    },
+    {
+      "k": "t+0s",
+      "lcd": [
+        "SAVE 31.95 RF",
+        "OK",
+        "GAS 134,298",
+        "1 TX TO SIGN",
+        "{ BACK",
+        "@ SIGN"
+      ]
+    },
+    {
+      "k": "t+1s",
+      "lcd": [
+        "SAVE 31.95 RF",
+        "PENDING",
+        "TX 1/1",
+        "0X6936AA89..222BE9"
+      ]
+    },
+    {
+      "k": "t+3s",
+      "lcd": [
+        "SAVE 31.95 RF",
+        "DONE",
+        "TX 0X6936AA89..222BE9",
+        "LINK UNDER THE SCREEN",
+        "[ OK ]"
+      ]
+    },
+    {
+      "k": "after",
+      "lcd": [
+        "SAVE 31.95 RF",
+        "DONE",
+        "TX 0X6936AA89..222BE9",
+        "LINK UNDER THE SCREEN",
+        "[ OK ]"
+      ]
+    }
+  ]
+}

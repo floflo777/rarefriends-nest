@@ -1,0 +1,159 @@
+{
+  "action": "HATCH",
+  "sent": [
+    {
+      "at": "2026-09-30T18:06:58.513Z",
+      "to": "0x0779369854d3EcdEA927206718FFD7730C67B71f",
+      "data": "0x095ea7b3000000000000000000000000d4a35e11318e3679168d409184b788bcf9f283ac0000000000000000000000000000000000000000000000000de0b6b3a76400004e4553540001",
+      "value": "0x0",
+      "hash": "0x5652f7748af203f8048486842b76f08ff74fbc38629a24eac0db538b7ee97a53"
+    },
+    {
+      "at": "2026-09-30T18:07:00.777Z",
+      "to": "0xd4a35e11318e3679168d409184b788bcf9f283ac",
+      "data": "0x9f68c98a00000000000000000000000000000000000000000000000000000000000000064e4553540001",
+      "value": "0x0",
+      "hash": "0xf7629e2235cafe0c2f8ca454c655683e822ee3cfd0ac03284b4b337a5c1dbb4c"
+    }
+  ],
+  "trail": [
+    {
+      "k": "care",
+      "lcd": [
+        "CARE",
+        "MISMIR",
+        "TRAIN #344030 7.5 RF",
+        "RAISE #344030 90 RF",
+        "WITHDRAW #344030 FREE",
+        "HATCH #344034 1 RF",
+        "FEED #344030 · TINY",
+        "BACK",
+        "{",
+        "}",
+        "@ SELECT"
+      ]
+    },
+    {
+      "k": "care-focused",
+      "lcd": [
+        "CARE",
+        "MISMIR",
+        "> TRAIN #344030 7.5 RF",
+        "RAISE #344030 90 RF",
+        "WITHDRAW #344030 FREE",
+        "HATCH #344034 1 RF",
+        "FEED #344030 · TINY",
+        "BACK",
+        "@ OK"
+      ]
+    },
+    {
+      "k": "cursor",
+      "lcd": [
+        "CARE",
+        "MISMIR",
+        "TRAIN #344030 7.5 RF",
+        "RAISE #344030 90 RF",
+        "WITHDRAW #344030 FREE",
+        "> HATCH #344034 1 RF",
+        "FEED #344030 · TINY",
+        "BACK",
+        "@ OK"
+      ]
+    },
+    {
+      "k": "confirm",
+      "lcd": [
+        "HATCH EGG #344034",
+        "→ GEN-6 1 RF",
+        "COST 1 RF",
+        "BURN 0.5 REW 0.5",
+        "+WEIGHT 1.1",
+        "BREAK-EVEN 4,995 WK",
+        "THIS IS A COLLECTOR'S",
+        "SPEND, NOT A YIELD",
+        "PLAY.",
+        "[ NO ]",
+        "[ YES ]",
+        "SELECTED NO"
+      ]
+    },
+    {
+      "k": "confirm-yes",
+      "lcd": [
+        "HATCH EGG #344034",
+        "→ GEN-6 1 RF",
+        "COST 1 RF",
+        "BURN 0.5 REW 0.5",
+        "+WEIGHT 1.1",
+        "BREAK-EVEN 4,995 WK",
+        "THIS IS A COLLECTOR'S",
+        "SPEND, NOT A YIELD",
+        "PLAY.",
+        "[ NO ]",
+        "[ YES ]",
+        "SELECTED YES"
+      ]
+    },
+    {
+      "k": "t+0s",
+      "lcd": [
+        "HATCH EGG #344034",
+        "OK",
+        "GAS 399,595",
+        "2 TX TO SIGN",
+        "{ BACK",
+        "@ SIGN"
+      ]
+    },
+    {
+      "k": "t+1s",
+      "lcd": [
+        "HATCH EGG #344034",
+        "PENDING",
+        "TX 1/2",
+        "0X5652F774..E97A53"
+      ]
+    },
+    {
+      "k": "t+3s",
+      "lcd": [
+        "HATCH EGG #344034",
+        "SIGN IN WALLET",
+        "TX 2/2",
+        "HARDWIRE(6): 1 RF, HALF",
+        "BURNED, THE EGG BECOMES",
+        "A GEN-6 FRIEND"
+      ]
+    },
+    {
+      "k": "t+3s",
+      "lcd": [
+        "HATCH EGG #344034",
+        "PENDING",
+        "TX 2/2",
+        "0XF7629E22..1DBB4C"
+      ]
+    },
+    {
+      "k": "t+5s",
+      "lcd": [
+        "HATCH EGG #344034",
+        "DONE",
+        "TX 0XF7629E22..1DBB4C",
+        "LINK UNDER THE SCREEN",
+        "[ OK ]"
+      ]
+    },
+    {
+      "k": "after",
+      "lcd": [
+        "HATCH EGG #344034",
+        "DONE",
+        "TX 0XF7629E22..1DBB4C",
+        "LINK UNDER THE SCREEN",
+        "[ OK ]"
+      ]
+    }
+  ]
+}

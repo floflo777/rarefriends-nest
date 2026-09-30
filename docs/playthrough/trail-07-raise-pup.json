@@ -1,0 +1,158 @@
+{
+  "action": "RAISE",
+  "sent": [
+    {
+      "at": "2026-09-30T18:11:15.556Z",
+      "to": "0x0779369854d3EcdEA927206718FFD7730C67B71f",
+      "data": "0x095ea7b3000000000000000000000000d4a35e11318e3679168d409184b788bcf9f283ac0000000000000000000000000000000000000000000000007ce66c50e28400004e4553540001",
+      "value": "0x0",
+      "hash": "0x9824df12fcc9e2cb526faad490a21cda2d97679ce82fa4c279410bc1be1a7a87"
+    },
+    {
+      "at": "2026-09-30T18:11:17.538Z",
+      "to": "0xd4a35e11318e3679168d409184b788bcf9f283ac",
+      "data": "0x5455429e0000000000000000000000000000000000000000000000000000000000053fe24e4553540001",
+      "value": "0x0",
+      "hash": "0xa752f385cdf8a42600a4be75d5bc78f954ee25d41745cd51bccc89b8266789a3"
+    }
+  ],
+  "trail": [
+    {
+      "k": "care",
+      "lcd": [
+        "CARE",
+        "DITTO",
+        "RAISE #344034 9 RF",
+        "TRAIN #344034 0.5 RF",
+        "HATCH #344036 10 RF",
+        "SAVE 30.95 RF FREE",
+        "FEED #344034 · TINY",
+        "BACK",
+        "{",
+        "}",
+        "@ SELECT"
+      ]
+    },
+    {
+      "k": "care-focused",
+      "lcd": [
+        "CARE",
+        "DITTO",
+        "> RAISE #344034 9 RF",
+        "TRAIN #344034 0.5 RF",
+        "HATCH #344036 10 RF",
+        "SAVE 30.95 RF FREE",
+        "FEED #344034 · TINY",
+        "BACK",
+        "@ OK"
+      ]
+    },
+    {
+      "k": "cursor",
+      "lcd": [
+        "CARE",
+        "DITTO",
+        "> RAISE #344034 9 RF",
+        "TRAIN #344034 0.5 RF",
+        "HATCH #344036 10 RF",
+        "SAVE 30.95 RF FREE",
+        "FEED #344034 · TINY",
+        "BACK",
+        "@ OK"
+      ]
+    },
+    {
+      "k": "confirm",
+      "lcd": [
+        "RAISE #344034",
+        "→ GEN 5",
+        "COST 9 RF",
+        "BURN 4.5 REW 4.5",
+        "+WEIGHT 10.9",
+        "BREAK-EVEN 4,528 WK",
+        "THIS IS A COLLECTOR'S",
+        "SPEND, NOT A YIELD",
+        "PLAY.",
+        "[ NO ]",
+        "[ YES ]",
+        "SELECTED NO"
+      ]
+    },
+    {
+      "k": "confirm-yes",
+      "lcd": [
+        "RAISE #344034",
+        "→ GEN 5",
+        "COST 9 RF",
+        "BURN 4.5 REW 4.5",
+        "+WEIGHT 10.9",
+        "BREAK-EVEN 4,528 WK",
+        "THIS IS A COLLECTOR'S",
+        "SPEND, NOT A YIELD",
+        "PLAY.",
+        "[ NO ]",
+        "[ YES ]",
+        "SELECTED YES"
+      ]
+    },
+    {
+      "k": "t+0s",
+      "lcd": [
+        "RAISE #344034",
+        "OK",
+        "GAS 293,863",
+        "2 TX TO SIGN",
+        "{ BACK",
+        "@ SIGN"
+      ]
+    },
+    {
+      "k": "t+1s",
+      "lcd": [
+        "RAISE #344034",
+        "PENDING",
+        "TX 1/2",
+        "0X9824DF12..1A7A87"
+      ]
+    },
+    {
+      "k": "t+3s",
+      "lcd": [
+        "RAISE #344034",
+        "SIGN IN WALLET",
+        "TX 2/2",
+        "PROMOTE(#344034) GEN 6",
+        "-> 5"
+      ]
+    },
+    {
+      "k": "t+3s",
+      "lcd": [
+        "RAISE #344034",
+        "PENDING",
+        "TX 2/2",
+        "0XA752F385..6789A3"
+      ]
+    },
+    {
+      "k": "t+4s",
+      "lcd": [
+        "RAISE #344034",
+        "DONE",
+        "TX 0XA752F385..6789A3",
+        "LINK UNDER THE SCREEN",
+        "[ OK ]"
+      ]
+    },
+    {
+      "k": "after",
+      "lcd": [
+        "RAISE #344034",
+        "DONE",
+        "TX 0XA752F385..6789A3",
+        "LINK UNDER THE SCREEN",
+        "[ OK ]"
+      ]
+    }
+  ]
+}

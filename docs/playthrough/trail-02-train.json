@@ -1,0 +1,158 @@
+{
+  "action": "TRAIN",
+  "sent": [
+    {
+      "at": "2026-09-30T18:05:50.063Z",
+      "to": "0x0779369854d3EcdEA927206718FFD7730C67B71f",
+      "data": "0x095ea7b3000000000000000000000000d4a35e11318e3679168d409184b788bcf9f283ac0000000000000000000000000000000000000000000000004563918244f400004e4553540001",
+      "value": "0x0",
+      "hash": "0xfa9541f53571bbfe4da30602611870567c4389f06e42eaac5d0d6b3360f5c1d9"
+    },
+    {
+      "at": "2026-09-30T18:05:52.568Z",
+      "to": "0xd4a35e11318e3679168d409184b788bcf9f283ac",
+      "data": "0xe0622b2700000000000000000000000014c49e6118f46525de9ab41a51cbaa3c6ebf181d0000000000000000000000000000000000000000000000000000000000053fde4e4553540001",
+      "value": "0x0",
+      "hash": "0x8819361a0b40199cc331504a49e290c46513776c8d14459a96bf6753441f495d"
+    }
+  ],
+  "trail": [
+    {
+      "k": "care",
+      "lcd": [
+        "CARE",
+        "MISMIR",
+        "RAISE #344030 90 RF",
+        "TRAIN #344030 5 RF",
+        "HATCH #344034 10 RF",
+        "SAVE 36.95 RF FREE",
+        "FEED #344030 · TINY",
+        "BACK",
+        "{",
+        "}",
+        "@ SELECT"
+      ]
+    },
+    {
+      "k": "care-focused",
+      "lcd": [
+        "CARE",
+        "MISMIR",
+        "> RAISE #344030 90 RF",
+        "TRAIN #344030 5 RF",
+        "HATCH #344034 10 RF",
+        "SAVE 36.95 RF FREE",
+        "FEED #344030 · TINY",
+        "BACK",
+        "@ OK"
+      ]
+    },
+    {
+      "k": "cursor",
+      "lcd": [
+        "CARE",
+        "MISMIR",
+        "RAISE #344030 90 RF",
+        "> TRAIN #344030 5 RF",
+        "HATCH #344034 10 RF",
+        "SAVE 36.95 RF FREE",
+        "FEED #344030 · TINY",
+        "BACK",
+        "@ OK"
+      ]
+    },
+    {
+      "k": "confirm",
+      "lcd": [
+        "TRAIN #344030",
+        "→ TIER 1",
+        "COST 5 RF",
+        "BURN 2.5 REW 2.5",
+        "+WEIGHT 6.38",
+        "BREAK-EVEN 4,309 WK",
+        "THIS IS A COLLECTOR'S",
+        "SPEND, NOT A YIELD",
+        "PLAY.",
+        "[ NO ]",
+        "[ YES ]",
+        "SELECTED NO"
+      ]
+    },
+    {
+      "k": "confirm-yes",
+      "lcd": [
+        "TRAIN #344030",
+        "→ TIER 1",
+        "COST 5 RF",
+        "BURN 2.5 REW 2.5",
+        "+WEIGHT 6.38",
+        "BREAK-EVEN 4,309 WK",
+        "THIS IS A COLLECTOR'S",
+        "SPEND, NOT A YIELD",
+        "PLAY.",
+        "[ NO ]",
+        "[ YES ]",
+        "SELECTED YES"
+      ]
+    },
+    {
+      "k": "t+0s",
+      "lcd": [
+        "TRAIN #344030",
+        "OK",
+        "GAS 304,949",
+        "2 TX TO SIGN",
+        "{ BACK",
+        "@ SIGN"
+      ]
+    },
+    {
+      "k": "t+1s",
+      "lcd": [
+        "TRAIN #344030",
+        "PENDING",
+        "TX 1/2",
+        "0XFA9541F5..F5C1D9"
+      ]
+    },
+    {
+      "k": "t+3s",
+      "lcd": [
+        "TRAIN #344030",
+        "SIGN IN WALLET",
+        "TX 2/2",
+        "UPGRADE(GENERATIONS,",
+        "#344030) TIER 0 -> 1"
+      ]
+    },
+    {
+      "k": "t+3s",
+      "lcd": [
+        "TRAIN #344030",
+        "PENDING",
+        "TX 2/2",
+        "0X8819361A..1F495D"
+      ]
+    },
+    {
+      "k": "t+5s",
+      "lcd": [
+        "TRAIN #344030",
+        "DONE",
+        "TX 0X8819361A..1F495D",
+        "LINK UNDER THE SCREEN",
+        "[ OK ]"
+      ]
+    },
+    {
+      "k": "after",
+      "lcd": [
+        "TRAIN #344030",
+        "DONE",
+        "TX 0X8819361A..1F495D",
+        "LINK UNDER THE SCREEN",
+        "[ OK ]"
+      ]
+    }
+  ]
+}

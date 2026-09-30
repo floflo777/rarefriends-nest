@@ -1,34 +1,34 @@
 {
-  "blockNumber": 76481919,
-  "timestamp": 1790767937,
+  "blockNumber": 76720483,
+  "timestamp": 1790791893,
   "totals": {
-    "burnedRf": 76265332.39375,
-    "burnEvents": 80706,
+    "burnedRf": 76706967.69375,
+    "burnEvents": 80910,
     "byAction": {
       "activate": {
-        "count": 4710,
-        "burnedRf": 32264496.15
+        "count": 4718,
+        "burnedRf": 32414496.4
       },
       "hardwire": {
-        "count": 37334,
-        "burnedRf": 28407461.5
+        "count": 62492,
+        "burnedRf": 28604432.5
       },
       "upgrade": {
-        "count": 9076,
-        "burnedRf": 10053533.96875
+        "count": 9090,
+        "burnedRf": 10237267.96875
       },
       "promote": {
-        "count": 4380,
-        "burnedRf": 4780525.5
+        "count": 4457,
+        "burnedRf": 5071135.5
       },
       "unknown": {
-        "count": 25206,
-        "burnedRf": 759315.275
+        "count": 153,
+        "burnedRf": 379635.325
       }
     },
     "viaNest": {
-      "burnEvents": 0,
-      "burnedRf": 0
+      "burnEvents": 5,
+      "burnedRf": 17.5
     }
   },
   "daily": [
@@ -104,8 +104,8 @@
     },
     {
       "day": "2026-09-30",
-      "burnedRf": 303906.525,
-      "events": 159
+      "burnedRf": 745541.825,
+      "events": 363
     }
   ],
   "leaderboard": [
@@ -180,6 +180,13 @@
       "viaNestRf": 0
     },
     {
+      "owner": "0x60E862CD77aF8F547446a8bc8E5c0F2Cb845Af58",
+      "burnedRf": 650000,
+      "actions": 13,
+      "lastActionAt": 1790778711,
+      "viaNestRf": 0
+    },
+    {
       "owner": "0x016099f9c894285B4BCf82424A4dbDE44195ebBC",
       "burnedRf": 648698.09375,
       "actions": 275,
@@ -194,6 +201,13 @@
       "viaNestRf": 0
     },
     {
+      "owner": "0xE595Ed0eee63FE6ceB3e6b6770B9D826223a3737",
+      "burnedRf": 600000,
+      "actions": 12,
+      "lastActionAt": 1790777225,
+      "viaNestRf": 0
+    },
+    {
       "owner": "0x30B5a6e6f54507E0DEE280923234204B6A82664A",
       "burnedRf": 568750,
       "actions": 14,
@@ -205,20 +219,6 @@
       "burnedRf": 556250,
       "actions": 11,
       "lastActionAt": 1789858354,
-      "viaNestRf": 0
-    },
-    {
-      "owner": "0x60E862CD77aF8F547446a8bc8E5c0F2Cb845Af58",
-      "burnedRf": 550000,
-      "actions": 11,
-      "lastActionAt": 1789588444,
-      "viaNestRf": 0
-    },
-    {
-      "owner": "0xE595Ed0eee63FE6ceB3e6b6770B9D826223a3737",
-      "burnedRf": 550000,
-      "actions": 11,
-      "lastActionAt": 1790460220,
       "viaNestRf": 0
     },
     {
@@ -257,6 +257,13 @@
       "viaNestRf": 0
     },
     {
+      "owner": "0x1f8a8aC54244E4016a376152b2F92D467552FA7B",
+      "burnedRf": 392174.125,
+      "actions": 41,
+      "lastActionAt": 1790786064,
+      "viaNestRf": 0
+    },
+    {
       "owner": "0xD35792547a323DEb7DCa9922af1C26cfB57e6bC9",
       "burnedRf": 391993.75,
       "actions": 28,
@@ -278,10 +285,24 @@
       "viaNestRf": 0
     },
     {
+      "owner": "0x024AEF1375c1701693b2a0c8e8AD7BaDf0dCe493",
+      "burnedRf": 356080,
+      "actions": 13,
+      "lastActionAt": 1790780287,
+      "viaNestRf": 0
+    },
+    {
       "owner": "0x5A9807b3E56b4bc9C8EA94DA8e76539a94f39fD1",
       "burnedRf": 355000,
       "actions": 8,
       "lastActionAt": 1790695263,
+      "viaNestRf": 0
+    },
+    {
+      "owner": "0xf74c487e7d9ffEBdcFB3189118d74b0b8591dC83",
+      "burnedRf": 353125,
+      "actions": 7,
+      "lastActionAt": 1790787939,
       "viaNestRf": 0
     },
     {
@@ -299,24 +320,10 @@
       "viaNestRf": 0
     },
     {
-      "owner": "0x024AEF1375c1701693b2a0c8e8AD7BaDf0dCe493",
-      "burnedRf": 311080,
-      "actions": 12,
-      "lastActionAt": 1790609040,
-      "viaNestRf": 0
-    },
-    {
       "owner": "0x08B986596E937DF0A9b28C28605A69622d08d2df",
       "burnedRf": 310618,
       "actions": 73,
       "lastActionAt": 1790317666,
-      "viaNestRf": 0
-    },
-    {
-      "owner": "0x1f8a8aC54244E4016a376152b2F92D467552FA7B",
-      "burnedRf": 307799.125,
-      "actions": 40,
-      "lastActionAt": 1790301584,
       "viaNestRf": 0
     },
     {
@@ -373,13 +380,6 @@
       "burnedRf": 275514.925,
       "actions": 74,
       "lastActionAt": 1790664143,
-      "viaNestRf": 0
-    },
-    {
-      "owner": "0xf74c487e7d9ffEBdcFB3189118d74b0b8591dC83",
-      "burnedRf": 268750,
-      "actions": 6,
-      "lastActionAt": 1790532360,
       "viaNestRf": 0
     },
     {
@@ -573,9 +573,9 @@
     },
     {
       "owner": "0xA93399A2965672dD315a1Bd8816Fa94C50Ef4dd5",
-      "burnedRf": 177319.99375,
-      "actions": 180,
-      "lastActionAt": 1790608616,
+      "burnedRf": 182319.99375,
+      "actions": 182,
+      "lastActionAt": 1790783377,
       "viaNestRf": 0
     },
     {
@@ -608,9 +608,9 @@
     },
     {
       "owner": "0x8e3435Ad7C1183BC0e34f9Ec34ea3423182E1c67",
-      "burnedRf": 164158.65,
-      "actions": 54,
-      "lastActionAt": 1790738790,
+      "burnedRf": 164583.7,
+      "actions": 57,
+      "lastActionAt": 1790790820,
       "viaNestRf": 0
     },
     {
@@ -653,6 +653,13 @@
       "burnedRf": 155244.7,
       "actions": 53,
       "lastActionAt": 1790707523,
+      "viaNestRf": 0
+    },
+    {
+      "owner": "0x4109266acaC7Bc28c754884920b059E016DDAf41",
+      "burnedRf": 154205,
+      "actions": 34,
+      "lastActionAt": 1790789838,
       "viaNestRf": 0
     },
     {
@@ -740,13 +747,6 @@
       "viaNestRf": 0
     },
     {
-      "owner": "0x4109266acaC7Bc28c754884920b059E016DDAf41",
-      "burnedRf": 140142.5,
-      "actions": 32,
-      "lastActionAt": 1790690038,
-      "viaNestRf": 0
-    },
-    {
       "owner": "0x1D3E52C1217458697291A6839C8aA3669F60239E",
       "burnedRf": 138660.15625,
       "actions": 39,
@@ -811,27 +811,27 @@
     }
   ],
   "hardwired": {
-    "total": 62461,
+    "total": 62492,
     "byGeneration": {
       "1": 522,
       "2": 335,
-      "3": 1032,
-      "4": 4223,
-      "5": 15528,
-      "6": 40821
+      "3": 1039,
+      "4": 4237,
+      "5": 15534,
+      "6": 40825
     },
-    "wallets": 3747,
+    "wallets": 3752,
     "firstBlock": 64590957,
-    "maxTokenId": 343845
+    "maxTokenId": 344034
   },
   "genesis": {
-    "activated": 495,
-    "inactive": 529,
+    "activated": 491,
+    "inactive": 533,
     "reserveHeld": 411
   },
   "coverage": {
     "fromBlock": 0,
-    "toBlock": 76481919,
+    "toBlock": 76720483,
     "complete": true,
     "partial": false
   }

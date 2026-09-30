@@ -1,0 +1,141 @@
+{
+  "action": "FEED",
+  "sent": [
+    {
+      "at": "2026-09-30T18:07:32.095Z",
+      "to": "0xd4a35e11318e3679168d409184b788bcf9f283ac",
+      "data": "0x996cba680000000000000000000000000779369854d3ecdea927206718ffd7730c67b71f00000000000000000000000014c49e6118f46525de9ab41a51cbaa3c6ebf181d0000000000000000000000000000000000000000000000000000000000053fde4e4553540001",
+      "value": "0x0",
+      "hash": "0xb02d0ead40ddafc067773ea3dd600030474e25ac4ad0dad80afa2593dbb61c57"
+    },
+    {
+      "at": "2026-09-30T18:07:34.572Z",
+      "to": "0xd4a35e11318e3679168d409184b788bcf9f283ac",
+      "data": "0x996cba680000000000000000000000000bd7d308f8e1639fab988df18a8011f41eacad7300000000000000000000000014c49e6118f46525de9ab41a51cbaa3c6ebf181d0000000000000000000000000000000000000000000000000000000000053fde4e4553540001",
+      "value": "0x0",
+      "hash": "0x2c8f23799ba024dc69254f88aecf807fb41e9589ee27cf37ac3f2b6d642949f2"
+    }
+  ],
+  "trail": [
+    {
+      "k": "care",
+      "lcd": [
+        "CARE",
+        "MISMIR",
+        "TRAIN #344030 7.5 RF",
+        "RAISE #344030 90 RF",
+        "WITHDRAW #344030 FREE",
+        "HATCH #344036 1 RF",
+        "FEED #344030 · TINY",
+        "BACK",
+        "{",
+        "}",
+        "@ SELECT"
+      ]
+    },
+    {
+      "k": "care-focused",
+      "lcd": [
+        "CARE",
+        "MISMIR",
+        "> TRAIN #344030 7.5 RF",
+        "RAISE #344030 90 RF",
+        "WITHDRAW #344030 FREE",
+        "HATCH #344036 1 RF",
+        "FEED #344030 · TINY",
+        "BACK",
+        "@ OK"
+      ]
+    },
+    {
+      "k": "cursor",
+      "lcd": [
+        "CARE",
+        "MISMIR",
+        "TRAIN #344030 7.5 RF",
+        "RAISE #344030 90 RF",
+        "WITHDRAW #344030 FREE",
+        "HATCH #344036 1 RF",
+        "> FEED #344030 · TINY",
+        "BACK",
+        "@ OK"
+      ]
+    },
+    {
+      "k": "confirm",
+      "lcd": [
+        "FEED #344030",
+        "→ TINY · NOT WORTH GAS",
+        "COST FREE",
+        "BURN 0 REW 0",
+        "+WEIGHT 0",
+        "BREAK-EVEN -",
+        "NOT WORTH GAS YET:",
+        "REWARDS BELOW THE GAS",
+        "TO CLAIM THEM.",
+        "[ NO ]",
+        "[ YES ]",
+        "SELECTED YES"
+      ]
+    },
+    {
+      "k": "t+0s",
+      "lcd": [
+        "FEED #344030",
+        "OK",
+        "GAS 218,564",
+        "2 TX TO SIGN",
+        "{ BACK",
+        "@ SIGN"
+      ]
+    },
+    {
+      "k": "t+1s",
+      "lcd": [
+        "FEED #344030",
+        "PENDING",
+        "TX 1/2",
+        "0XB02D0EAD..B61C57"
+      ]
+    },
+    {
+      "k": "t+3s",
+      "lcd": [
+        "FEED #344030",
+        "SIGN IN WALLET",
+        "TX 2/2",
+        "CLAIM 0.000000 WETH INTO",
+        "THE FRIEND'S WALLET"
+      ]
+    },
+    {
+      "k": "t+3s",
+      "lcd": [
+        "FEED #344030",
+        "PENDING",
+        "TX 2/2",
+        "0X2C8F2379..2949F2"
+      ]
+    },
+    {
+      "k": "t+5s",
+      "lcd": [
+        "FEED #344030",
+        "DONE",
+        "TX 0X2C8F2379..2949F2",
+        "LINK UNDER THE SCREEN",
+        "[ OK ]"
+      ]
+    },
+    {
+      "k": "after",
+      "lcd": [
+        "FEED #344030",
+        "DONE",
+        "TX 0X2C8F2379..2949F2",
+        "LINK UNDER THE SCREEN",
+        "[ OK ]"
+      ]
+    }
+  ]
+}

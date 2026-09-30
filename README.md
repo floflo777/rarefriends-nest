@@ -6,6 +6,7 @@ Nest is a handheld virtual pet for [Rare Friends](https://rarefriends.com) on Ro
 
 - Design: [docs/design.md](docs/design.md)
 - Economics, with the chain's own numbers: [docs/economics.md](docs/economics.md)
+- Real-wallet playthrough on mainnet, 14 tagged transactions, 17.5 RF burned via Nest: [docs/real-wallet.md](docs/real-wallet.md)
 - Dry-run proofs of every action: [docs/dry-run.md](docs/dry-run.md)
 - Steward delegate, specified and not deployed: [docs/delegate.md](docs/delegate.md)
 
@@ -15,6 +16,7 @@ Live: https://floflo777.github.io/rarefriends-nest/
 
 - **Visitor mode, no wallet:** https://floflo777.github.io/rarefriends-nest/?p=/pet/gen/1969 shows any Friend read-only.
 - **Demo, no gas:** https://floflo777.github.io/rarefriends-nest/?p=/demo is a simulated household built from a real snapshot; every action is labelled SIMULATED.
+- **A Friend hatched and trained through Nest on mainnet:** https://floflo777.github.io/rarefriends-nest/?p=/pet/gen/344030
 - **Ledger:** https://floflo777.github.io/rarefriends-nest/?p=/ledger · **Pet card:** https://floflo777.github.io/rarefriends-nest/?p=/card/gen/1969
 
 Deep links use the `/?p=/route` form: GitHub Pages answers `/pet/gen/1969` from its 404 page (the app still loads, with HTTP 404), while `/?p=/pet/gen/1969` is the site root (HTTP 200) and the app restores the route at boot.

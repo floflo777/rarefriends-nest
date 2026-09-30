@@ -1,0 +1,115 @@
+{
+  "action": "WITHDRAW",
+  "sent": [
+    {
+      "at": "2026-09-30T18:08:03.662Z",
+      "to": "0x484576b724C2084c9B58db1D1855829fDe47aEb6",
+      "data": "0x519454470000000000000000000000000779369854d3ecdea927206718ffd7730c67b71f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000044a9059cbb00000000000000000000000012330ccc005398c66cb6bb6f4440e393593c6b83000000000000000000000000000000000000000000000001bb611acc17611a2b000000000000000000000000000000000000000000000000000000004e4553540001",
+      "value": "0x0",
+      "hash": "0x89cc55ac1e16c9154fe8b2478351b14ec4344b536213a1d65bd1b05f0ce2900c"
+    }
+  ],
+  "trail": [
+    {
+      "k": "care",
+      "lcd": [
+        "CARE",
+        "MISMIR",
+        "TRAIN #344030 7.5 RF",
+        "RAISE #344030 90 RF",
+        "WITHDRAW #344030 FREE",
+        "HATCH #344036 1 RF",
+        "FEED #344030 · TINY",
+        "BACK",
+        "{",
+        "}",
+        "@ SELECT"
+      ]
+    },
+    {
+      "k": "care-focused",
+      "lcd": [
+        "CARE",
+        "MISMIR",
+        "> TRAIN #344030 7.5 RF",
+        "RAISE #344030 90 RF",
+        "WITHDRAW #344030 FREE",
+        "HATCH #344036 1 RF",
+        "FEED #344030 · TINY",
+        "BACK",
+        "@ OK"
+      ]
+    },
+    {
+      "k": "cursor",
+      "lcd": [
+        "CARE",
+        "MISMIR",
+        "TRAIN #344030 7.5 RF",
+        "RAISE #344030 90 RF",
+        "> WITHDRAW #344030 FREE",
+        "HATCH #344036 1 RF",
+        "FEED #344030 · TINY",
+        "BACK",
+        "@ OK"
+      ]
+    },
+    {
+      "k": "confirm",
+      "lcd": [
+        "WITHDRAW #344030",
+        "→ OWNER WALLET",
+        "COST FREE",
+        "BURN 0 REW 0",
+        "+WEIGHT 0",
+        "BREAK-EVEN -",
+        "NOT A SPEND: TAKES THE",
+        "PET'S RF SAVINGS BACK",
+        "TO YOUR WALLET.",
+        "[ NO ]",
+        "[ YES ]",
+        "SELECTED YES"
+      ]
+    },
+    {
+      "k": "t+0s",
+      "lcd": [
+        "WITHDRAW #344030",
+        "OK",
+        "GAS 76,708",
+        "1 TX TO SIGN",
+        "{ BACK",
+        "@ SIGN"
+      ]
+    },
+    {
+      "k": "t+1s",
+      "lcd": [
+        "WITHDRAW #344030",
+        "PENDING",
+        "TX 1/1",
+        "0X89CC55AC..E2900C"
+      ]
+    },
+    {
+      "k": "t+3s",
+      "lcd": [
+        "WITHDRAW #344030",
+        "DONE",
+        "TX 0X89CC55AC..E2900C",
+        "LINK UNDER THE SCREEN",
+        "[ OK ]"
+      ]
+    },
+    {
+      "k": "after",
+      "lcd": [
+        "WITHDRAW #344030",
+        "DONE",
+        "TX 0X89CC55AC..E2900C",
+        "LINK UNDER THE SCREEN",
+        "[ OK ]"
+      ]
+    }
+  ]
+}
