@@ -62,6 +62,10 @@ Tables are authored by us; inputs are all chain state, so two people looking at 
 
 For each Friend and each possible action: cost, Δweight, weekly RF at the current stream, break-even weeks. Ranks actions: claims worth gas first, then paid actions by break-even, then Save and Withdraw (no spend), then claims below 0.5 RF and 0.00005 WETH, flagged "Not worth gas yet" so a Gen-6 pup's 0.01 RF a week is never ranked first. Prepares `approve` + action calldata and dry-runs them (`eth_call` and `eth_estimateGas` from the holder's address) before the wallet is asked. CLI `nest plan <address>` prints the same plan as JSON for agents. Fully autonomous mode (a scoped delegate contract with allowed functions, spend cap and expiry) is specified in `docs/delegate.md` and not deployed.
 
+## Attributable burns
+
+Every transaction Nest prepares carries a 6-byte tag appended to its calldata (`0x4e4553540001`, "NEST" + version). The protocol contracts ignore trailing calldata (verified by dry-run on claim, upgrade, approve and hardwire), so behaviour is identical, but any indexer can count the RF burned *through Nest*: a burn whose transaction input ends with the tag came from Nest. The Ledger shows this counter next to the protocol total. It starts at zero; it is the honest way to measure "most successful at burning" for a front end that does not deploy contracts.
+
 ## For judges without a Friend
 
 - `/pet/<tokenId>`: any Friend, read-only, no wallet.

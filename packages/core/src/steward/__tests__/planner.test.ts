@@ -244,3 +244,12 @@ describe("hatch generation follows the wallet balance (protocol rule UnexpectedG
     expect(poor.some((a) => a.kind === "save")).toBe(false);
   });
 });
+
+
+describe("Nest tag", () => {
+  it("every prepared transaction ends with NEST_TAG so burns via Nest are attributable on chain", () => {
+    const plan = planHousehold(household, state);
+    expect(plan.length).toBeGreaterThan(0);
+    for (const a of plan) for (const tx of a.txs) expect(tx.data.toLowerCase().endsWith("4e4553540001")).toBe(true);
+  });
+});

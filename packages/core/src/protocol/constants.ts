@@ -131,3 +131,12 @@ export const TIER_CUMULATIVE_BPS = [10_000, 15_000, 22_500, 33_750, 50_625] as c
 export const GENERATION_WEIGHT_BPS = [0, 17_500, 16_000, 14_500, 13_000, 12_000, 11_000] as const;
 export const BURN_SHARE = 0.5;
 export const STREAM_SECONDS = 7 * 24 * 3600;
+
+/**
+ * Nest appends this tag to the calldata of every transaction it prepares. Solidity's ABI decoder
+ * ignores trailing calldata, so the protocol contracts behave identically (verified with
+ * eth_simulateV1 on claim, upgrade, approve and hardwire), and anyone can count on chain the RF
+ * burned through Nest: a burn whose transaction input ends with this tag came from Nest.
+ * Bytes: "NEST" + version 0001.
+ */
+export const NEST_TAG = "0x4e4553540001" as const;

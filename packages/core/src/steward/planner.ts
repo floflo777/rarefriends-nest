@@ -6,7 +6,7 @@
 import { encodeFunctionData } from "viem";
 import type { Address, Hex } from "viem";
 import type { Friend, Household, PreparedTx, ProtocolState, StewardAction, StewardActionKind } from "../types.js";
-import { ACTIVATION_MANAGER_ABI, ADDRESSES, ERC20_ABI, ERC6551_ACCOUNT_ABI } from "../protocol/constants.js";
+import { ACTIVATION_MANAGER_ABI, ADDRESSES, ERC20_ABI, NEST_TAG, ERC6551_ACCOUNT_ABI } from "../protocol/constants.js";
 import {
   MAX_TIER,
   activateCostWei,
@@ -366,7 +366,16 @@ export function planHousehold(household: Household, state: ProtocolState, option
     if (save !== null) actions.push(save);
   }
   const affordable = options.onlyAffordable === true ? actions.filter((a) => a.costRf === 0 || household.rfBalance >= rfCeilWei(a.costRf)) : actions;
-  return affordable.sort(compareActions);
+  return affordable.sort(compareActions).map(tagAction);
+}
+
+/** Appends NEST_TAG to every transaction so burns made through Nest are attributable on chain. */
+export function tagCalldata(data: Hex): Hex {
+  return data.toLowerCase().endsWith(NEST_TAG.slice(2)) ? data : (`${data}${NEST_TAG.slice(2)}` as Hex);
+}
+
+function tagAction(action: StewardAction): StewardAction {
+  return { ...action, txs: action.txs.map((tx) => ({ ...tx, data: tagCalldata(tx.data) })) };
 }
 
 function rfCeilWei(costRf: number): bigint {

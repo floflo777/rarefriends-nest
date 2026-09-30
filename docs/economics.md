@@ -61,6 +61,10 @@ Formula: break-even weeks = cost ÷ (Δweight ÷ (totalWeight + Δweight) × wee
 
 The protocol's design problem is that its sink is one-shot and its UI is a form. Games were meant to be the recurring sink, and the field answered with 1 RF chance tables that keep RF inside a game contract. Nest instead points players at the protocol's own sink, which is two to four orders of magnitude larger per action, and gives them the reasons a pet gives. It needs no new contract, no house, no bankroll, and the organizers keep 100% of the design authority over prices.
 
+## Measuring what Nest causes
+
+Nest tags every transaction it prepares (6 bytes appended to the calldata, ignored by the contracts). The indexer counts burns whose transaction carries the tag as "via Nest". The number is zero at submission and will be exactly right afterwards, which is the only defensible way for a contract-free front end to claim burn.
+
 ## What Nest does not claim
 
 - It does not create yield where there is none. Generations actions are collector's spends at today's stream; Nest says so.
