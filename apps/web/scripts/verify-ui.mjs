@@ -2,7 +2,8 @@
 // Drives a running build (default http://127.0.0.1:4173) with Chromium and saves screenshots
 // to docs/screenshots. Checks: /pet/gen/1969 renders a non-blank LCD with a name and a hunger
 // bar from live chain data, and its HOME screen shows the tokenURI scene as an <img> with a
-// data URL; /demo runs Feed -> SIMULATED toast and a paid CONFIRM (Train) opens on NO; /ledger
+// data URL; /demo runs Feed -> SIMULATED toast, the EATING reaction (MMM line) within 3 s of
+// the verdict, and a paid CONFIRM (Train) opens on NO; /ledger
 // shows the snapshot or the "not built yet" state; /card/gen/1969 draws the card; the landing
 // page carries a live LCD and the three entry points.
 import { mkdirSync } from "node:fs";
@@ -118,8 +119,25 @@ await ok.click();
 // The device's own toast (the demo page adds a second status line for its dry-run note).
 const toastArea = page.locator(".toast-area");
 await toastArea.filter({ hasText: /Fed #1969/ }).waitFor({ timeout: 10_000 });
+const verdictAt = Date.now();
 const toast = (await toastArea.textContent()) ?? "";
 check(toast.startsWith("SIMULATED:") && /Fed #1969/.test(toast), `demo: toast "${toast.slice(0, 80)}"`);
+// 2b. The EATING reaction: header EATING and the family's MMM line within 3 s of the verdict.
+const isEating = (t) => t[0] === "EATING" || t.some((l) => l.startsWith("MMM."));
+let eating = [];
+let sawMmm = false;
+while (Date.now() - verdictAt < 3_000) {
+  eating = await lcdText(page);
+  if (eating.some((l) => l.startsWith("MMM."))) {
+    sawMmm = true;
+    break;
+  }
+  await page.waitForTimeout(100);
+}
+console.log("eating transcript:", eating);
+check(sawMmm || isEating(eating), `demo: EATING reaction with the MMM line within 3 s of the verdict (${eating[0]}, ${eating.find((l) => l.startsWith("MMM.")) ?? "no MMM"})`);
+check(eating.some((l) => /^BOWL [0-3]\/3$/.test(l)), "demo: bowl fill step in the transcript");
+await page.screenshot({ path: resolve(OUT, "eating.png") });
 await page.screenshot({ path: resolve(OUT, "demo.png") });
 
 // 3. Ledger: snapshot or a clear "not built yet".

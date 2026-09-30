@@ -23,7 +23,7 @@ export function DemoPage() {
   const mock = useMemo(() => createMockSource({ snapshot: () => live.snapshot(), scene: (f) => live.scene(f) }), [live]);
   const [phase, setPhase] = useState<DemoPhase | null>(null);
   const onSimulate = useCallback(
-    (action: StewardAction) => runDemo(action, { client: live.client, owner: DEMO_OWNER, simulate: (a) => mock.simulate(a), onPhase: setPhase }).then((r) => r.line),
+    (action: StewardAction) => runDemo(action, { client: live.client, owner: DEMO_OWNER, simulate: (a) => mock.simulate(a), onPhase: setPhase }).then((r) => ({ line: r.line, applied: r.applied })),
     [live, mock],
   );
   const { fixture } = mock;

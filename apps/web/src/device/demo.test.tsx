@@ -35,6 +35,70 @@ describe("demo action flow", () => {
     expect(after.savings.rf).toBe(baked.savings.rf + baked.rewards.earnedRf);
   });
 
+  it("Feed plays EATING on the LCD once the verdict is in, then leaves on its timer; a revert plays nothing", async () => {
+    const mock = createMockSource();
+    render(<Device source={mock} mode="demo" target={{ kind: "household", owner: DEMO_OWNER }} onSimulate={(action) => ({ line: mock.simulate(action), applied: true })} />);
+    await waitFor(() => expect(lcdText()).toContain("G1 T2"));
+    const ok = screen.getByRole("button", { name: "OK" });
+    fireEvent.click(ok);
+    fireEvent.click(ok);
+    fireEvent.click(ok); // YES on Feed
+    await waitFor(() => expect(lcdText()[0]).toBe("EATING"));
+    expect(lcdText()).toContain("BOWL 0/3");
+    await waitFor(() => expect(lcdText().some((l) => l.startsWith("MMM."))).toBe(true), { timeout: 2000 });
+    expect(lcdText().some((l) => /^BOWL [123]\/3$/.test(l))).toBe(true);
+    // Leaves on its own after 2.5 s: the PET screen is back with the name in the header.
+    await waitFor(() => expect(lcdText()[0]).not.toBe("EATING"), { timeout: 3000 });
+    expect(lcdText()).toContain("@ CARE");
+    expect(lcdText()[0]).toMatch(/^[A-Z]+$/);
+  });
+
+  it("a dry-run revert applies nothing and plays no reaction; a button press skips a reaction", async () => {
+    const mock = createMockSource();
+    let applied = false;
+    render(<Device source={mock} mode="demo" target={{ kind: "household", owner: DEMO_OWNER }} onSimulate={() => ({ line: "WOULD REVERT · Nope · NOT SENT (DEMO)", applied })} />);
+    await waitFor(() => expect(lcdText()).toContain("G1 T2"));
+    const ok = screen.getByRole("button", { name: "OK" });
+    fireEvent.click(ok);
+    fireEvent.click(ok);
+    fireEvent.click(ok); // YES on Feed, verdict: revert
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/WOULD REVERT/));
+    expect(lcdText()[0]).not.toBe("EATING");
+    expect(lcdText()).toContain("@ CARE");
+    // Now an applied Feed: the reaction starts and the next press skips it.
+    applied = true;
+    fireEvent.click(ok);
+    fireEvent.click(ok);
+    fireEvent.click(ok);
+    await waitFor(() => expect(lcdText()[0]).toBe("EATING"));
+    fireEvent.click(ok);
+    expect(lcdText()[0]).not.toBe("EATING");
+    expect(lcdText()).toContain("@ CARE"); // the press was swallowed: still PET, not CARE
+  });
+
+  it("reduced motion: the reaction is a single final frame with the caption, for the same duration", async () => {
+    const original = window.matchMedia;
+    window.matchMedia = (() => ({ matches: true, addEventListener() {}, removeEventListener() {} })) as unknown as typeof window.matchMedia;
+    try {
+      const mock = createMockSource();
+      render(<Device source={mock} mode="demo" target={{ kind: "household", owner: DEMO_OWNER }} onSimulate={(action) => mock.simulate(action)} />);
+      await waitFor(() => expect(lcdText()).toContain("G1 T2"));
+      const ok = screen.getByRole("button", { name: "OK" });
+      fireEvent.click(ok);
+      fireEvent.click(ok);
+      fireEvent.click(ok);
+      await waitFor(() => expect(lcdText()[0]).toBe("EATING"));
+      expect(lcdText()).toContain("BOWL 3/3");
+      expect(lcdText()).toContain("HUNGER BAR 0%");
+      expect(lcdText().some((l) => l.startsWith("MMM."))).toBe(true);
+      await new Promise((r) => setTimeout(r, 1500));
+      expect(lcdText()[0]).toBe("EATING"); // still there at 1.5 s
+      await waitFor(() => expect(lcdText()[0]).not.toBe("EATING"), { timeout: 2000 });
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+
   it("keyboard arrows and Enter drive the machine; visitor mode never triggers actions", async () => {
     const mock = createMockSource();
     let called = 0;

@@ -4,16 +4,17 @@
  * number from core: planner actions, vitals, personality, protocol state. Phrasing for the
  * 24-column panel (row labels, CONFIRM header, rationale fitting) lives in model/care.ts.
  */
-import { blitFrame, drawBar, drawIcon, fillRect, frameBounds, frameIndexAt, setPixel, weiToRf, type Friend, type ProtocolState, type Household, type Snapshot, type Sprite, type StewardAction } from "@nest/core";
+import { ICONS, blitFrame, blitRows, drawBar, drawIcon, fillRect, frameBounds, frameIndexAt, setPixel, weiToRf, type Friend, type IconName, type ProtocolState, type Household, type Snapshot, type Sprite, type StewardAction } from "@nest/core";
 import { CHAR_ADVANCE, LINE_ADVANCE, textWidth } from "../lcd/font.js";
 import { COLS, LCD_H, LCD_W, createPainter, fit, fitSentence, imageOf, invertRect, row, text, textCentered, textRight, wrap, type Painter, type ScreenImage } from "../lcd/paint.js";
 import type { SourceErrorCode } from "../data/source.js";
 import { careCost, careLabel, confirmHeader, confirmRationale, squeezeLabel, type CareItem } from "../model/care.js";
 import { compact, compactWei, grouped, percent, shortAddress, shortHash } from "../model/format.js";
-import { MOOD_ICON, genTier, identityOf, petState, territorySteps, type PetMemory } from "../model/pet.js";
+import { MOOD_ICON, genTier, identityOf, idleMotion, lastCareAt, petState, territorySteps, type PetMemory } from "../model/pet.js";
 import type { TokenScene } from "../model/scene.js";
 import { coverageOf, coverageSince, coverageStatus, unknownBurnShare } from "../model/snapshot.js";
 import type { MachineState } from "./machine.js";
+import { reactionFrame, type Reaction } from "./reaction.js";
 import type { RunState } from "./run.js";
 
 export type DeviceMode = "wallet" | "visitor" | "demo";
@@ -49,6 +50,12 @@ export interface ScreenModel {
   memory: PetMemory;
   /** HOME: the pet's tokenURI scene, or null before anyone asked for it. */
   scene: SceneState | null;
+  /** Demo only: a simulated Raise changed the pet's generation, the minted scene did not. */
+  sceneStale?: boolean;
+  /** Care reaction in progress; drawn over the PET screen until it ends. */
+  reaction?: Reaction | null;
+  /** Hatching: the new pup's sprite once the data source has it. */
+  pupSprite?: Sprite | null;
 }
 
 const ROW0 = 9;
@@ -111,6 +118,7 @@ function petName(f: Friend): string {
 export function renderScreen(state: MachineState, m: ScreenModel): ScreenImage {
   const p = createPainter();
   if (m.run) renderRun(p, m.run, m);
+  else if (m.reaction) renderReaction(p, m.reaction, m);
   else {
     switch (state.screen) {
       case "PET":
@@ -187,18 +195,21 @@ function renderPet(p: Painter, m: ScreenModel): void {
   const pet = petState(f, m.protocol, m.now, m.memory);
   const identity = identityOf(f);
 
+  const idle = idleMotion(pet, m.now, m.reducedMotion, lastCareAt(m.memory));
+
   header(p, m, fit(identity.name, 14), "", LCD_W - 10);
-  drawIcon(p.lcd, MOOD_ICON[pet.mood], LCD_W - 8, 0);
+  if (idle.iconOn) drawIcon(p.lcd, MOOD_ICON[pet.mood], LCD_W - 8, 0);
   p.transcript.push(`MOOD ${pet.mood.toUpperCase()}`);
+  if (idle.glance) p.transcript.push("GLANCE AT BOWL");
 
   if (m.sprite) {
     const clip = m.reducedMotion || pet.animation.clip === "idle" ? m.sprite.idle : m.sprite.walk;
-    const frame = clip[m.reducedMotion ? 0 : frameIndexAt(pet.animation, m.now, clip.length)];
+    const frame = clip[m.reducedMotion || idle.still ? 0 : frameIndexAt(pet.animation, m.now, clip.length)];
     if (frame) {
       const scale = spriteScale(f, frame);
       // x3 portraits (24 px) sit centred in the 32 px sprite box.
       const offset = scale === 3 ? 4 : 0;
-      blitFrame(p.lcd, frame, 3 + offset, ROW0 + offset, scale);
+      blitFrame(p.lcd, frame, 3 + offset + idle.dx, ROW0 + offset, scale);
     }
   } else if (!m.loading) {
     text(p, 7, ROW0 + 10, "NO");
@@ -242,7 +253,8 @@ function renderHome(p: Painter, m: ScreenModel): void {
   else if (s.status === "failed") message(p, [caption, "", "SCENE UNAVAILABLE", ...wrap(s.message, COLS, 2)], rowY(1));
   else {
     const name = s.scene.name.trim();
-    message(p, [name ? fit(name.toUpperCase(), COLS) : `#${f.tokenId}`, caption, "", s.scene.imageDataUrl ? "SHOWN IN COLOUR ABOVE" : "NO IMAGE IN TOKENURI"], rowY(1));
+    const shown = s.scene.imageDataUrl ? "SHOWN IN COLOUR ABOVE" : "NO IMAGE IN TOKENURI";
+    message(p, [name ? fit(name.toUpperCase(), COLS) : `#${f.tokenId}`, caption, "", ...(m.sceneStale ? wrap("SCENE UPDATES AFTER THE REAL PROMOTE", COLS, 2) : [shown])], rowY(1));
   }
   footer(p, "@ PET");
 }
@@ -405,6 +417,154 @@ function renderLedger(p: Painter, m: ScreenModel): void {
     message(p, m.status.snapshot ? ["SNAPSHOT", "NOT BUILT YET"] : ["LOADING SNAPSHOT..."], rowY(5));
   }
   if (!pr && m.status.protocol) row(p, tightY(0), "BURNED", "NO SIGNAL");
+}
+
+/** An 8x8 icon drawn at x2 (16x16), for the reaction's right column. */
+function icon2x(p: Painter, name: IconName, x: number, y: number, mask?: (row: number, col: number) => boolean): void {
+  const rows = ICONS[name].map((line, r) => [...line].map((ch, c) => ch === "#" && (mask ? mask(r, c) : true)));
+  blitRows(p.lcd, rows, x, y, 2);
+}
+
+/** Sprite box: the pet's idle clip at `fps` (hop = double rate), frame 0 when still. */
+function reactionSprite(p: Painter, m: ScreenModel, f: Friend, animate: boolean, fpsScale: number, dy = 0): void {
+  if (!m.sprite) return;
+  const pet = petState(f, m.protocol, m.now, m.memory);
+  const clip = m.sprite.idle;
+  const frame = clip[animate ? frameIndexAt({ ...pet.animation, fps: pet.animation.fps * fpsScale }, m.now, clip.length) : 0];
+  if (!frame) return;
+  const scale = spriteScale(f, frame);
+  const offset = scale === 3 ? 4 : 0;
+  blitFrame(p.lcd, frame, 3 + offset, ROW0 + offset + dy, scale);
+}
+
+/** Eight sparkle pixels around the 32 px sprite box, positions stepping with the frame. */
+function sparkles(p: Painter, now: number): void {
+  const phase = Math.floor(now * 8);
+  for (let i = 0; i < 8; i++) {
+    const k = (i * 7 + phase * 3) % 32;
+    // Walk the box's perimeter (x 0..37, y 7..42), one pixel per sparkle.
+    const side = i % 4;
+    const x = side === 0 ? 1 + k : side === 1 ? 37 : side === 2 ? 37 - k : 1;
+    const y = side === 0 ? 7 : side === 1 ? 8 + k : side === 2 ? 42 : 8 + (31 - k);
+    if ((i + phase) % 3 !== 0) setPixel(p.lcd, x, y);
+  }
+  p.transcript.push("SPARKLE");
+}
+
+/** Egg at x2 in the sprite box with `crack` (0..3) crack pixels knocked out. */
+function crackedEgg(p: Painter, crack: number): void {
+  const x = 11;
+  const y = ROW0 + 8;
+  icon2x(p, "egg", x, y);
+  const cracks: [number, number][][] = [
+    [[6, 6], [7, 7], [8, 8], [9, 7]],
+    [[5, 5], [10, 6], [11, 5], [8, 9], [7, 10]],
+    [[4, 4], [12, 4], [6, 11], [9, 11], [10, 10], [5, 9]],
+  ];
+  for (let c = 0; c < Math.min(3, crack); c++) for (const [cx, cy] of cracks[c]!) setPixel(p.lcd, x + cx, y + cy, false);
+  p.transcript.push(`EGG CRACK ${Math.min(3, crack)}/3`);
+}
+
+/** Right-column hunger label + bar, as on PET. */
+function hungerRow(p: Painter, x: number, hunger: number): void {
+  text(p, x, rowY(2), "HUNGER");
+  drawBar(p.lcd, x, rowY(2) + 6, LCD_W - x - 2, 5, hunger);
+  p.transcript.push(`HUNGER BAR ${Math.round(hunger * 100)}%`);
+}
+
+/**
+ * A care reaction over the PET layout: the sprite box on the left, the changed vital on
+ * the right, the caption where the speech line goes. `frame` (screens/reaction.ts) decides
+ * the step and the caption; reduced motion holds its final frame.
+ */
+function renderReaction(p: Painter, r: Reaction, m: ScreenModel): void {
+  const fr = reactionFrame(r, m.now, m.reducedMotion);
+  const f = r.friend ?? m.pet;
+  header(p, m, fr.title);
+  const x = 40;
+  switch (r.kind) {
+    case "eating": {
+      if (f) reactionSprite(p, m, f, fr.moving, 2, fr.moving && Math.floor(m.now * 4) % 2 === 0 ? -2 : 0);
+      if (f) generationBand(p, 4, ROW0 + 32, territorySteps(f));
+      // Bowl: outline, then three fill steps (bottom row, upper row, heap above the rim).
+      const bx = x + 2;
+      const by = rowY(0) - 1;
+      icon2x(p, "bowl", bx, by);
+      if (fr.step >= 1) fillRect(p.lcd, bx + 4, by + 10, 8, 2);
+      if (fr.step >= 2) fillRect(p.lcd, bx + 2, by + 8, 12, 2);
+      if (fr.step >= 3) fillRect(p.lcd, bx + 4, by + 4, 8, 2);
+      p.transcript.push(`BOWL ${fr.step}/3`);
+      if (f) text(p, bx + 20, rowY(0) + 1, fit(`#${f.tokenId}`, 5));
+      hungerRow(p, x, fr.hunger);
+      break;
+    }
+    case "training": {
+      if (f) {
+        reactionSprite(p, m, f, fr.moving, 1);
+        generationBand(p, 4, ROW0 + 32, territorySteps(f));
+        const gt = genTier({ ...f, position: { ...f.position, tier: fr.step } });
+        text(p, x, rowY(0), gt);
+        const pipsX = x + textWidth(gt) + 3;
+        if (pipsX + 15 <= LCD_W - 1) tierPips(p, pipsX, rowY(0) + 1, fr.step);
+        text(p, x, rowY(1), fit(identityOf(f).familyLabel, 14));
+      }
+      if (fr.moving) sparkles(p, m.now);
+      break;
+    }
+    case "moving": {
+      if (f) {
+        reactionSprite(p, m, f, fr.moving, 1);
+        generationBand(p, 4, ROW0 + 32, fr.step);
+        const gen = f.collection === "Genesis" ? null : f.generation;
+        text(p, x, rowY(0), gen === null ? "GENESIS" : `GEN ${gen}`);
+        if (gen !== null && fr.step > r.steps.from) text(p, x, rowY(1), `→ GEN ${Math.max(1, gen - 1)}`);
+        text(p, x, rowY(2), fit(identityOf(f).familyLabel, 14));
+      }
+      break;
+    }
+    case "hatching": {
+      const pup = fr.step >= 3 ? m.pupSprite?.idle[0] : undefined;
+      if (fr.step >= 3 && pup) {
+        blitFrame(p.lcd, pup, 3, ROW0, 2);
+        p.transcript.push("PUP");
+      } else crackedEgg(p, fr.step);
+      if (r.pupId !== null) text(p, x, rowY(0), fit(`EGG #${r.pupId}`, 14));
+      text(p, x, rowY(1), fr.step >= 3 ? "HATCHED" : "CRACKING...");
+      break;
+    }
+    case "waking": {
+      if (f) {
+        reactionSprite(p, m, f, fr.moving && fr.step === 2, 1);
+        generationBand(p, 4, ROW0 + 32, territorySteps(f));
+        text(p, x, rowY(2), fr.step === 2 ? "AWAKE" : "ASLEEP");
+      }
+      const ix = x + 4;
+      const iy = rowY(0) - 1;
+      if (fr.step === 0) icon2x(p, "zzz", ix, iy);
+      else if (fr.step === 1) icon2x(p, "zzz", ix, iy, (row, col) => (row + col) % 2 === 0);
+      else icon2x(p, "sun", ix, iy);
+      p.transcript.push(fr.step === 2 ? "SUN" : "ZZZ");
+      break;
+    }
+    case "saving":
+    case "withdrawing": {
+      if (f) {
+        reactionSprite(p, m, f, fr.moving, 1);
+        generationBand(p, 4, ROW0 + 32, territorySteps(f));
+      }
+      const hx = x + 30;
+      const hy = rowY(0) - 1;
+      icon2x(p, "house", hx, hy);
+      // The coin travels the 26 px between the column's left edge and the house door.
+      const t = r.kind === "saving" ? fr.progress : 1 - fr.progress;
+      const cx = x + Math.round(t * 26);
+      drawIcon(p.lcd, "coin", cx, hy + 6);
+      p.transcript.push(r.kind === "saving" ? "COIN IN" : "COIN OUT");
+      if (f) text(p, x, rowY(3), fit(`#${f.tokenId} WALLET`, 14));
+      break;
+    }
+  }
+  fr.caption.forEach((l, i) => textCentered(p, rowY(5) + i * LINE_ADVANCE, fit(l, COLS)));
 }
 
 /** "ERC20InsufficientAllowance(0xd4a3..., 0, 1125e20)" -> readable rows: name split on word boundaries, short args. */

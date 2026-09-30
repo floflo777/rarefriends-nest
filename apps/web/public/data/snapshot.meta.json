@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-09-30T12:45:46.989Z",
+  "generatedAt": "2026-09-30T13:09:48.148Z",
   "startedAt": "2026-09-30T12:45:42.603Z",
-  "durationMs": 4386,
+  "durationMs": 1445545,
   "status": "running",
   "coverage": {
     "fromBlock": 0,
@@ -18,11 +18,11 @@
     "newBurnRecords": 0,
     "newForeignBurns": 0,
     "rpc": {
-      "requests": 12,
-      "items": 12,
-      "retries": 0,
-      "rateLimited": 0,
-      "paceFactor": 1
+      "requests": 1534,
+      "items": 30452,
+      "retries": 72,
+      "rateLimited": 72,
+      "paceFactor": 1.723435676082353
     }
   },
   "reconciliation": {
@@ -37,10 +37,21 @@
     "gapPct": 0.004516316572264892
   },
   "classification": {
-    "unresolvedRecords": 80706,
+    "unresolvedRecords": 43155,
     "receiptChecked": 0,
     "stillUnknown": 25206,
-    "unknownSelectors": {},
+    "unknownSelectors": {
+      "0x1fad948c": {
+        "count": 113,
+        "burnedRf": 331993.4375,
+        "action": "unknown"
+      },
+      "0x60808060": {
+        "count": 478,
+        "burnedRf": 239,
+        "action": "unknown"
+      }
+    },
     "viaNest": {
       "burnEvents": 0,
       "burnedRf": 0

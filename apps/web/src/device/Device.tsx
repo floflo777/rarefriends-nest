@@ -14,20 +14,27 @@ import { shortHash } from "../model/format.js";
 import { identityOf, petState, previousSavings, recentCareEvents, rememberSavings, type PetMemory } from "../model/pet.js";
 import { sceneSource, type TokenScene } from "../model/scene.js";
 import { initialState, step, type Input, type MachineContext, type MachineState, type Screen } from "../screens/machine.js";
+import { isReactionOver, reactionEndsAt, screenAfterReaction, startReaction, type Reaction, type ReactionKind } from "../screens/reaction.js";
 import { renderScreen, sceneCaption, type DeviceMode, type SceneState, type ScreenModel } from "../screens/render.js";
 import { phaseAfterDryRun, runInput, type RunState } from "../screens/run.js";
 import type { ChainActions } from "../wallet/actions.js";
 import { Buttons } from "./Buttons.jsx";
-import { click } from "./sound.js";
+import { blip, click, type BlipName } from "./sound.js";
 import { useDeviceData, type DeviceTarget } from "./useDeviceData.js";
+
+/** What a demo simulation reports: the toast line, and whether the mock applied the action (a dry-run revert applies nothing). */
+export interface SimulateResult {
+  line: string;
+  applied: boolean;
+}
 
 export interface DeviceProps {
   source: NestDataSource;
   mode: DeviceMode;
   target: DeviceTarget;
   initialScreen?: Screen;
-  /** Demo mode: applies the action to the mock and returns the toast line. */
-  onSimulate?: (action: StewardAction) => Promise<string> | string;
+  /** Demo mode: applies the action to the mock and returns the toast line (a bare string means applied). */
+  onSimulate?: (action: StewardAction) => Promise<string | SimulateResult> | string | SimulateResult;
   /** Wallet mode: ownership gate, dry-run and signing. Absent in demo and visitor mode. */
   chain?: ChainActions;
   /** Rendered under the device (links, wallet controls). */
@@ -41,10 +48,11 @@ interface DeviceState {
   pending: { kind: StewardAction["kind"]; seq: number } | null;
 }
 
-type DeviceEvent = { type: "input"; input: Input; ctx: MachineContext } | { type: "ran" };
+type DeviceEvent = { type: "input"; input: Input; ctx: MachineContext } | { type: "ran" } | { type: "goto"; screen: Screen };
 
 function reducer(s: DeviceState, e: DeviceEvent): DeviceState {
   if (e.type === "ran") return { ...s, pending: null };
+  if (e.type === "goto") return { ...s, machine: initialState(e.screen) };
   const [machine, effect] = step(s.machine, e.input, e.ctx);
   return {
     machine,
@@ -55,6 +63,11 @@ function reducer(s: DeviceState, e: DeviceEvent): DeviceState {
 
 const SOUND_KEY = "nest.sound";
 const SLOW_TICK_MS = 30_000;
+/** Frame rate while a reaction plays (the hop is the idle clip at double rate; sparkles step at 8 Hz). */
+const REACTION_FPS = 8;
+
+/** The blip a reaction opens with; save, withdraw and wake stay silent. */
+const REACTION_BLIP: Readonly<Partial<Record<ReactionKind, BlipName>>> = { eating: "eat", training: "train", moving: "raise", hatching: "hatch" };
 
 function readSound(): boolean {
   try {
@@ -89,6 +102,9 @@ export function Device({ source, mode, target, initialScreen = "PET", onSimulate
   const [run, setRun] = useState<RunState | null>(null);
   const [txLinks, setTxLinks] = useState<Hex[]>([]);
   const [scenes, setScenes] = useState<Record<string, SceneState>>({});
+  /** Demo only: pets whose generation moved on the mock while the minted scene did not. */
+  const [staleScenes, setStaleScenes] = useState<Record<string, true>>({});
+  const [reaction, setReaction] = useState<Reaction | null>(null);
   /** Promotes/upgrades run in this session, so the pet looks proud right after. */
   const [localEvents, setLocalEvents] = useState<CareEvent[]>([]);
   /** Savings scale per token as it was when the token first came on screen this session. */
@@ -155,15 +171,58 @@ export function Device({ source, mode, target, initialScreen = "PET", onSimulate
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [petKey, data.generation]);
 
+  /** Plays the action's reaction on the LCD now that its verdict is known. */
+  const beginReaction = useCallback(
+    (action: StewardAction) => {
+      const at = Date.now();
+      const r = startReaction(action, pet, data.protocol, at / 1000, mode === "demo");
+      if (!r) return;
+      setNowMs(at);
+      setReaction(r);
+      const name = REACTION_BLIP[r.kind];
+      if (sound && name) blip(name);
+    },
+    [pet, data.protocol, mode, sound],
+  );
+
+  /** Ends the reaction (timer or button): a move goes on to HOME and refreshes the scene. */
+  const endReaction = useCallback(() => {
+    if (!reaction) return;
+    setReaction(null);
+    const next = screenAfterReaction(reaction);
+    if (!next) return;
+    dispatch({ type: "goto", screen: next });
+    const key = reaction.friend ? friendKey(reaction.friend.collection, reaction.friend.tokenId) : petKey;
+    if (!key) return;
+    if (mode === "demo") setStaleScenes((m) => ({ ...m, [key]: true }));
+    else
+      setScenes((m) => {
+        const { [key]: _dropped, ...rest } = m;
+        return rest;
+      });
+  }, [reaction, petKey, mode]);
+
+  useEffect(() => {
+    if (!reaction) return;
+    const now = Date.now() / 1000;
+    if (isReactionOver(reaction, now)) {
+      endReaction();
+      return;
+    }
+    const t = setTimeout(endReaction, Math.ceil((reactionEndsAt(reaction) - now) * 1000));
+    return () => clearTimeout(t);
+  }, [reaction, endReaction]);
+
   const finishRun = useCallback(
     (refresh: boolean) => {
       setRun(null);
       if (refresh) {
         chain?.settled?.();
         data.refresh();
+        if (run?.phase.phase === "done") beginReaction(run.action);
       }
     },
-    [chain, data],
+    [chain, data, run, beginReaction],
   );
 
   const sign = useCallback(
@@ -206,9 +265,13 @@ export function Device({ source, mode, target, initialScreen = "PET", onSimulate
       void Promise.resolve()
         .then(() => onSimulate(action))
         .then(
-          (line) => {
+          (result) => {
+            const { line, applied } = typeof result === "string" ? { line: result, applied: true } : result;
             setToast(line);
-            recordCare(action);
+            if (applied) {
+              recordCare(action);
+              beginReaction(action);
+            }
             data.refresh();
           },
           (e: unknown) => setToast(errorText(e)),
@@ -252,7 +315,7 @@ export function Device({ source, mode, target, initialScreen = "PET", onSimulate
   }, [screen, petKey]);
 
   // Clock: at the clip's frame rate on the PET screen, slowly elsewhere (vitals and mood follow the time).
-  const fps = pet && screen === "PET" && !reduced && !run ? petState(pet, data.protocol, now, memory).animation.fps : 0;
+  const fps = reaction ? (reduced ? 0 : REACTION_FPS) : pet && screen === "PET" && !reduced && !run ? petState(pet, data.protocol, now, memory).animation.fps : 0;
   useEffect(() => {
     const t = setInterval(() => setNowMs(Date.now()), fps > 0 ? Math.round(1000 / fps) : SLOW_TICK_MS);
     return () => clearInterval(t);
@@ -261,6 +324,10 @@ export function Device({ source, mode, target, initialScreen = "PET", onSimulate
   const press = useCallback(
     (input: Input) => {
       if (sound) click();
+      if (reaction) {
+        endReaction(); // any button skips the reaction
+        return;
+      }
       if (run) {
         const command = runInput(run, input);
         if (command === "sign") void sign(run.action);
@@ -270,7 +337,7 @@ export function Device({ source, mode, target, initialScreen = "PET", onSimulate
       }
       dispatch({ type: "input", input, ctx });
     },
-    [ctx, sound, run, sign, finishRun],
+    [ctx, sound, run, sign, finishRun, reaction, endReaction],
   );
 
   useEffect(() => {
@@ -317,12 +384,15 @@ export function Device({ source, mode, target, initialScreen = "PET", onSimulate
     run,
     memory,
     scene: petKey ? (scenes[petKey] ?? null) : null,
+    sceneStale: petKey !== null && staleScenes[petKey] === true,
+    reaction,
+    pupSprite: reaction?.pupId !== null && reaction?.pupId !== undefined ? (data.sprites[friendKey("Generations", reaction.pupId)] ?? null) : null,
   };
   const image = renderScreen(state.machine, model);
   const sceneState = model.scene;
   const sceneSrc = sceneState?.status === "ready" ? sceneSource(sceneState.scene, reduced) : null;
   const lcdScene: LcdScene | null =
-    screen === "HOME" && !run && pet && sceneSrc ? { src: sceneSrc, alt: `On-chain scene of ${identityOf(pet).name}, ${pet.collection} #${pet.tokenId}`, caption: sceneCaption(pet) } : null;
+    screen === "HOME" && !run && !reaction && pet && sceneSrc ? { src: sceneSrc, alt: `On-chain scene of ${identityOf(pet).name}, ${pet.collection} #${pet.tokenId}`, caption: sceneCaption(pet) } : null;
 
   return (
     <section className="device" aria-label="Nest handheld">

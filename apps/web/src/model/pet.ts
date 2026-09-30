@@ -4,6 +4,7 @@ import {
   careEventsFromBurns,
   computeVitals,
   describe,
+  frameIndexAt,
   moodState,
   speechLine,
   type Animation,
@@ -59,6 +60,57 @@ export const MOOD_ICON: Readonly<Record<MoodState, IconName>> = {
   thrifty: "coin",
   asleep: "zzz",
 };
+
+/** How long the star keeps blinking after a promote/upgrade (proud). */
+export const PROUD_BLINK_S = 60;
+/** Hungry: one glance at the bowl every this many seconds. */
+const GLANCE_EVERY_S = 5;
+
+export interface IdleMotion {
+  /** Horizontal offset of the sprite in pixels (restless paces, hungry leans toward the bowl). */
+  dx: number;
+  /** Frame 0 only (asleep). */
+  still: boolean;
+  /** Hungry, looking at the bowl this second. */
+  glance: boolean;
+  /** Whether the mood icon is drawn this frame (bowl flicker, zzz pulse, star blink). */
+  iconOn: boolean;
+}
+
+const STILL: IdleMotion = { dx: 0, still: false, glance: false, iconOn: true };
+
+/**
+ * Idle behaviour on the PET screen, derived from core's mood and clip: restless paces
+ * left/right by up to 3 px over the walk clip; hungry glances at the bowl one second in five
+ * (the bowl flickers); asleep holds frame 0 while the zzz pulses; proud blinks the star for
+ * PROUD_BLINK_S after the last care event. Reduced motion: nothing moves or blinks.
+ */
+export function idleMotion(pet: PetState, now: number, reducedMotion: boolean, lastCareAt?: number): IdleMotion {
+  if (reducedMotion) return pet.mood === "asleep" ? { ...STILL, still: true } : STILL;
+  switch (pet.mood) {
+    case "restless": {
+      const i = frameIndexAt(pet.animation, now);
+      const t = i < 16 ? i / 16 : (32 - i) / 16; // triangle 0..1..0 over the clip
+      return { ...STILL, dx: Math.round(t * 6) - 3 };
+    }
+    case "hungry": {
+      const glance = Math.floor(now) % GLANCE_EVERY_S === 0;
+      return { dx: glance ? 2 : 0, still: false, glance, iconOn: !glance || Math.floor(now * 6) % 2 === 0 };
+    }
+    case "asleep":
+      return { ...STILL, still: true, iconOn: Math.floor(now) % 2 === 0 };
+    case "proud":
+      return { ...STILL, iconOn: lastCareAt === undefined || now - lastCareAt >= PROUD_BLINK_S || Math.floor(now * 2) % 2 === 0 };
+    default:
+      return STILL;
+  }
+}
+
+/** The most recent care event's time, if any. */
+export function lastCareAt(memory: PetMemory): number | undefined {
+  const times = (memory.recentEvents ?? []).map((e) => e.at);
+  return times.length > 0 ? Math.max(...times) : undefined;
+}
 
 export interface PetIdentity {
   /** Header name: core's registry-derived name (Generations) or Genesis name. */

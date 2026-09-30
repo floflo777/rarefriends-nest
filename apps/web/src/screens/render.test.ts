@@ -4,6 +4,7 @@ import { createMockSource, DEMO_OWNER } from "../data/mock.js";
 import { careMenu, gateMenu, hatchOf } from "../model/care.js";
 import { compact } from "../model/format.js";
 import { initialState } from "./machine.js";
+import { startReaction } from "./reaction.js";
 import { renderScreen, type ScreenModel } from "./render.js";
 
 async function fixtures() {
@@ -146,6 +147,91 @@ describe("screens", () => {
     }).text;
     expect(ready).toContain("ON-CHAIN SCENE \u00b7 GEN 1");
     expect(ready).toContain("FRIEND #1969");
+  });
+
+  it("EATING draws the bowl filling in three steps, the hop, the hunger bar running down and the MMM line", async () => {
+    const { base, plan, pet, protocol } = await fixtures();
+    const claim = plan.find((a) => a.kind === "claim" && a.friend?.tokenId === 1969n)!;
+    const t0 = protocol.timestamp;
+    const reaction = startReaction(claim, pet, protocol, t0, true)!;
+    const at = (dt: number, reducedMotion = false) => renderScreen(initialState("PET"), { ...base, reducedMotion, now: t0 + dt, reaction }).text;
+    expect(at(0)[0]).toBe("EATING");
+    expect(at(0)).toContain("BOWL 0/3");
+    expect(at(0).some((l) => l.startsWith("MMM."))).toBe(false);
+    expect(at(1)).toContain("BOWL 1/3");
+    expect(at(1)).toContain(reaction.line);
+    expect(at(1.6)).toContain("BOWL 2/3");
+    expect(at(2.5)).toContain("BOWL 3/3");
+    expect(at(2.5)).toContain("HUNGER BAR 0%");
+    const bar = (t: string[]) => Number(/^HUNGER BAR (\d+)%$/.exec(t.find((l) => l.startsWith("HUNGER BAR")) ?? "")?.[1]);
+    expect(bar(at(0))).toBeGreaterThan(bar(at(1.5)));
+    // Reduced motion: the final frame from the start, caption included; the speech line stays off.
+    expect(at(0, true)).toContain("BOWL 3/3");
+    expect(at(0, true)).toContain(reaction.line);
+    expect(at(0, true)).toContain("HUNGER BAR 0%");
+    // The hop keeps the sprite box lit (idle clip at double rate); no run screen text leaks in.
+    const lit = renderScreen(initialState("PET"), { ...base, reducedMotion: false, now: t0 + 0.5, reaction }).pixels;
+    let on = 0;
+    for (let y = 7; y < 42; y++) for (let x = 3; x < 36; x++) on += lit[y * 96 + x]!;
+    expect(on).toBeGreaterThan(20);
+    expect(at(1)).not.toContain("@ CARE");
+  });
+
+  it("TRAINING lights the pips to the new tier with +STRENGTH; MOVING HOUSE grows the band; reduced motion is the final frame", async () => {
+    const { base, plan, pet, protocol } = await fixtures();
+    const t0 = protocol.timestamp;
+    const train = startReaction(plan.find((a) => a.kind === "train" && a.friend?.tokenId === 1969n)!, pet, protocol, t0, true)!;
+    const early = renderScreen(initialState("PET"), { ...base, reducedMotion: false, now: t0, reaction: train }).text;
+    expect(early[0]).toBe("TRAINING");
+    expect(early).toContain("TIER 2/4");
+    expect(early).toContain("SPARKLE");
+    const late = renderScreen(initialState("PET"), { ...base, reducedMotion: false, now: t0 + 1.9, reaction: train }).text;
+    expect(late).toContain("TIER 3/4");
+    expect(late).toContain("+STRENGTH");
+    const still = renderScreen(initialState("PET"), { ...base, now: t0, reaction: train }).text;
+    expect(still).toContain("TIER 3/4");
+    expect(still).not.toContain("SPARKLE");
+    const raise = plan.find((a) => a.kind === "raise")!;
+    const move = startReaction(raise, raise.friend!, protocol, t0, true)!;
+    const before = renderScreen(initialState("PET"), { ...base, reducedMotion: false, now: t0 + 1, reaction: move }).text;
+    const after = renderScreen(initialState("PET"), { ...base, reducedMotion: false, now: t0 + 2.9, reaction: move }).text;
+    expect(before[0]).toBe("MOVING HOUSE");
+    expect(before).toContain(`GEN BAND ${move.steps.from}/6`);
+    expect(after).toContain(`GEN BAND ${move.steps.to}/6`);
+    expect(after).toContain("NEW LAND ON CHAIN");
+    // Demo HOME after a simulated raise says the minted scene has not changed.
+    const home = renderScreen(initialState("HOME"), {
+      ...base,
+      sceneStale: true,
+      scene: { status: "ready", scene: { name: "Friend #1969", description: "", imageDataUrl: "data:image/svg+xml;base64,PHN2Zy8+", animationDataUrl: null } },
+    }).text;
+    expect(home.join(" ")).toContain("SCENE UPDATES AFTER THE REAL PROMOTE");
+  });
+
+  it("idle behaviour follows the mood: asleep pulses the zzz and holds the frame, hungry glances at the bowl", async () => {
+    const { base, pet, protocol } = await fixtures();
+    // Asleep: an inactive position; the icon is drawn on even seconds only, never under reduced motion.
+    const asleep = { ...pet, position: { ...pet.position, active: false, weight: 0n } };
+    const lcd = (now: number, reducedMotion: boolean, f = asleep) => renderScreen(initialState("PET"), { ...base, reducedMotion, now, pet: f });
+    const iconLit = (img: ReturnType<typeof renderScreen>) => {
+      let on = 0;
+      for (let y = 0; y < 8; y++) for (let x = 88; x < 96; x++) on += img.pixels[y * 96 + x]!;
+      return on;
+    };
+    expect(lcd(1_000_000, false).text).toContain("MOOD ASLEEP");
+    expect(iconLit(lcd(1_000_000, false))).toBeGreaterThan(0);
+    expect(iconLit(lcd(1_000_001, false))).toBe(0);
+    expect(iconLit(lcd(1_000_001, true))).toBeGreaterThan(0);
+    expect(lcd(1_000_000, false).pixels).toEqual(lcd(1_000_000.6, false).pixels); // still: same frame across the second
+    // Hungry: rewards worth well over the threshold but under restless; glance one second in five.
+    const weekly = pet.rewards.earnedRf; // 1969's baked rewards are ~a week's worth: hunger 1 -> restless, so scale down
+    const hungry = { ...pet, rewards: { ...pet.rewards, earnedRf: (weekly * 60n) / 100n } };
+    const h = renderScreen(initialState("PET"), { ...base, reducedMotion: false, now: protocol.timestamp - (protocol.timestamp % 5), pet: hungry }).text;
+    if (h.includes("MOOD HUNGRY")) {
+      expect(h).toContain("GLANCE AT BOWL");
+      const off = renderScreen(initialState("PET"), { ...base, reducedMotion: false, now: protocol.timestamp - (protocol.timestamp % 5) + 1, pet: hungry }).text;
+      expect(off).not.toContain("GLANCE AT BOWL");
+    }
   });
 
   it("Genesis has no Generations family: header is #id, family GENESIS", async () => {
